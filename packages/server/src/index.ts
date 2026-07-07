@@ -12,11 +12,12 @@ async function main(): Promise<void> {
   await runMigrations(config.databaseUrl)
 
   const db = createDbClient(config.databaseUrl)
-  const app = buildApp(db)
 
   const monitors = await fetchEnabledMonitors(db)
   const scheduler = new CheckScheduler(db)
   scheduler.start(monitors)
+
+  const app = await buildApp(db, scheduler, config.apiKey)
 
   const retention = startRetentionLoop(db, config.checkRetentionDays)
 
