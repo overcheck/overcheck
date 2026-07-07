@@ -1,9 +1,16 @@
 import { createServer } from 'node:net'
 import type { AddressInfo, Server } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
-import { TEST_API_KEY, testApp, testDb } from '../setup.js'
+import { TEST_ADMIN_TOKEN, testApp, testDb } from '../setup.js'
 
-const authHeader = { authorization: `Bearer ${TEST_API_KEY}` }
+// A getter, not a plain value: TEST_ADMIN_TOKEN is assigned asynchronously in setup.ts's
+// beforeAll, which runs after this module's top-level code, so a plain object here would
+// freeze in the pre-beforeAll `undefined`.
+const authHeader = {
+  get authorization() {
+    return `Bearer ${TEST_ADMIN_TOKEN}`
+  },
+}
 
 async function createMonitor(overrides: Record<string, unknown> = {}) {
   const response = await testApp.inject({
@@ -24,16 +31,16 @@ async function createMonitor(overrides: Record<string, unknown> = {}) {
 }
 
 describe('monitors API', () => {
-  it('rejects requests without an API key', async () => {
+  it('rejects requests without a session token', async () => {
     const response = await testApp.inject({ method: 'GET', url: '/api/monitors' })
     expect(response.statusCode).toBe(401)
   })
 
-  it('rejects requests with the wrong API key', async () => {
+  it('rejects requests with an invalid session token', async () => {
     const response = await testApp.inject({
       method: 'GET',
       url: '/api/monitors',
-      headers: { authorization: 'Bearer wrong-key' },
+      headers: { authorization: 'Bearer wrong-token' },
     })
     expect(response.statusCode).toBe(401)
   })
