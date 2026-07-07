@@ -11,6 +11,7 @@ Overcheck: open-source, self-hosted uptime monitoring built for **teams and auto
 
 ## Architecture decisions (settled — don't relitigate without new evidence)
 - TypeScript / Node.js backend; PostgreSQL only (no SQLite); single `docker compose up` deploy
+- Node.js: 24.x (Active LTS)
 - **API-first:** every capability is a REST endpoint with OpenAPI spec; the web UI is just an API client
 - Monitors definable in YAML (`overcheck apply -f monitors.yaml`) and via API and UI; YAML is first-class
 - Auth: email+password with roles (admin/editor/viewer) in v1; OIDC in v1.x
