@@ -56,12 +56,31 @@ export interface StatusPageMonitorTable {
   sort_order: number
 }
 
+export interface UserTable {
+  id: Generated<number>
+  email: string
+  password_hash: string
+  role: 'admin' | 'editor' | 'viewer'
+  created_at: ColumnType<Date, string | undefined, never>
+  updated_at: ColumnType<Date, string | undefined, string | undefined>
+}
+
+export interface SessionTable {
+  id: Generated<number>
+  user_id: number
+  token_hash: string
+  expires_at: ColumnType<Date, string, string>
+  created_at: ColumnType<Date, string | undefined, never>
+}
+
 export interface Database {
   monitors: MonitorTable
   check_results: CheckResultTable
   alert_channels: AlertChannelTable
   status_pages: StatusPageTable
   status_page_monitors: StatusPageMonitorTable
+  users: UserTable
+  sessions: SessionTable
 }
 
 export function createDbClient(connectionString: string): Kysely<Database> {

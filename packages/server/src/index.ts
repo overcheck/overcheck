@@ -17,7 +17,7 @@ async function main(): Promise<void> {
   const scheduler = new CheckScheduler(db)
   scheduler.start(monitors)
 
-  const app = await buildApp(db, scheduler, config.apiKey)
+  const app = await buildApp(db, scheduler, config.sessionTtlHours)
 
   const retention = startRetentionLoop(db, config.checkRetentionDays)
 

@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { TEST_API_KEY, testApp } from '../setup.js'
+import { TEST_ADMIN_TOKEN, testApp } from '../setup.js'
 
-const authHeader = { authorization: `Bearer ${TEST_API_KEY}` }
+// A getter, not a plain value: TEST_ADMIN_TOKEN is assigned asynchronously in setup.ts's
+// beforeAll, which runs after this module's top-level code, so a plain object here would
+// freeze in the pre-beforeAll `undefined`.
+const authHeader = {
+  get authorization() {
+    return `Bearer ${TEST_ADMIN_TOKEN}`
+  },
+}
 
 describe('alert-channels API', () => {
-  it('rejects requests without an API key', async () => {
+  it('rejects requests without a session token', async () => {
     const response = await testApp.inject({ method: 'GET', url: '/api/alert-channels' })
     expect(response.statusCode).toBe(401)
   })

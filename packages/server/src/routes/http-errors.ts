@@ -11,3 +11,11 @@ export function sendConflict(reply: FastifyReply, message: string): void {
 export function sendBadRequest(reply: FastifyReply, message: string): void {
   reply.code(400).send({ statusCode: 400, error: 'Bad Request', message })
 }
+
+export function sendUnauthorized(reply: FastifyReply, message: string): void {
+  reply.code(401).send({ statusCode: 401, error: 'Unauthorized', message })
+}
+
+export function sendForbidden(reply: FastifyReply, message: string): void {
+  reply.code(403).send({ statusCode: 403, error: 'Forbidden', message })
+}

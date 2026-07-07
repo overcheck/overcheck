@@ -2,18 +2,20 @@ import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
 import Fastify, { type FastifyInstance } from 'fastify'
 import type { Kysely } from 'kysely'
-import { registerApiKeyAuth } from './auth.js'
+import { registerSessionAuth } from './auth.js'
 import type { CheckScheduler } from './check-engine/scheduler.js'
 import type { Database } from './db/client.js'
 import { registerAlertChannelRoutes } from './routes/alert-channels.js'
+import { registerAuthProtectedRoutes, registerAuthPublicRoutes } from './routes/auth.js'
 import { registerHealthRoute } from './routes/health.js'
 import { registerMonitorRoutes } from './routes/monitors.js'
 import { registerStatusPageRoutes } from './routes/status-pages.js'
+import { registerUserRoutes } from './routes/users.js'
 
 export async function buildApp(
   db: Kysely<Database>,
   scheduler: CheckScheduler,
-  apiKey: string,
+  sessionTtlHours: number,
 ): Promise<FastifyInstance> {
   const app = Fastify({ logger: true })
 
@@ -28,10 +30,16 @@ export async function buildApp(
 
   await app.register(
     async (api) => {
-      await registerApiKeyAuth(api, apiKey)
-      registerMonitorRoutes(api, db, scheduler)
-      registerAlertChannelRoutes(api, db)
-      registerStatusPageRoutes(api, db)
+      registerAuthPublicRoutes(api, db, sessionTtlHours)
+
+      await api.register(async (authed) => {
+        await registerSessionAuth(authed, db)
+        registerAuthProtectedRoutes(authed, db)
+        registerUserRoutes(authed, db)
+        registerMonitorRoutes(authed, db, scheduler)
+        registerAlertChannelRoutes(authed, db)
+        registerStatusPageRoutes(authed, db)
+      })
     },
     { prefix: '/api' },
   )

@@ -1,6 +1,7 @@
 import { Type, type Static } from '@sinclair/typebox'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type { Kysely, Selectable } from 'kysely'
+import { requireRole } from '../auth.js'
 import type { CheckScheduler } from '../check-engine/scheduler.js'
 import { toMonitor } from '../check-engine/repository.js'
 import type { Database, MonitorTable } from '../db/client.js'
@@ -120,14 +121,24 @@ export function registerMonitorRoutes(
   db: Kysely<Database>,
   scheduler: CheckScheduler,
 ): void {
-  app.get('/monitors', { schema: { response: { 200: Type.Array(MonitorResponse) } } }, async () => {
-    const rows = await db.selectFrom('monitors').selectAll().orderBy('id').execute()
-    return rows.map(rowToApi)
-  })
+  app.get(
+    '/monitors',
+    {
+      preHandler: [requireRole('viewer')],
+      schema: { response: { 200: Type.Array(MonitorResponse) } },
+    },
+    async () => {
+      const rows = await db.selectFrom('monitors').selectAll().orderBy('id').execute()
+      return rows.map(rowToApi)
+    },
+  )
 
   app.get(
     '/monitors/:id',
-    { schema: { params: ParamsWithId, response: { 200: MonitorResponse } } },
+    {
+      preHandler: [requireRole('viewer')],
+      schema: { params: ParamsWithId, response: { 200: MonitorResponse } },
+    },
     async (request: FastifyRequest<{ Params: Static<typeof ParamsWithId> }>, reply) => {
       const row = await db
         .selectFrom('monitors')
@@ -141,7 +152,10 @@ export function registerMonitorRoutes(
 
   app.post(
     '/monitors',
-    { schema: { body: MonitorBody, response: { 201: MonitorResponse } } },
+    {
+      preHandler: [requireRole('editor')],
+      schema: { body: MonitorBody, response: { 201: MonitorResponse } },
+    },
     async (request: FastifyRequest<{ Body: MonitorBodyT }>, reply) => {
       const body = request.body
       if (!validateTypeRequirements(body, reply)) return
@@ -184,6 +198,7 @@ export function registerMonitorRoutes(
   app.patch(
     '/monitors/:id',
     {
+      preHandler: [requireRole('editor')],
       schema: {
         params: ParamsWithId,
         body: MonitorUpdateBody,
@@ -257,7 +272,10 @@ export function registerMonitorRoutes(
 
   app.delete(
     '/monitors/:id',
-    { schema: { params: ParamsWithId, response: { 204: Type.Null() } } },
+    {
+      preHandler: [requireRole('editor')],
+      schema: { params: ParamsWithId, response: { 204: Type.Null() } },
+    },
     async (request: FastifyRequest<{ Params: Static<typeof ParamsWithId> }>, reply) => {
       const result = await db
         .deleteFrom('monitors')

@@ -3,7 +3,7 @@ export interface Config {
   port: number
   nodeEnv: string
   checkRetentionDays: number
-  apiKey: string
+  sessionTtlHours: number
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -12,16 +12,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new Error('DATABASE_URL is required')
   }
 
-  const apiKey = env.API_KEY
-  if (!apiKey) {
-    throw new Error('API_KEY is required')
-  }
-
   return {
     databaseUrl,
     port: Number(env.PORT ?? 3000),
     nodeEnv: env.NODE_ENV ?? 'development',
     checkRetentionDays: Number(env.CHECK_RETENTION_DAYS ?? 30),
-    apiKey,
+    sessionTtlHours: Number(env.SESSION_TTL_HOURS ?? 168),
   }
 }
