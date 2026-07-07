@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { pruneOldCheckResults } from '../../src/check-engine/repository.js'
 import { testDb } from '../setup.js'
 
+// Unique per run: the test DB is shared and never truncated between runs (ADR-005), this row is
+// never deleted, and monitors.name has a unique constraint.
 async function insertMonitor(): Promise<number> {
   const row = await testDb
     .insertInto('monitors')
     .values({
-      name: 'retention test monitor',
+      name: `retention test monitor ${Date.now()}-${Math.random()}`,
       type: 'tcp',
       interval_seconds: 10,
       host: '127.0.0.1',

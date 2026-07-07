@@ -3,11 +3,14 @@ import { TEST_API_KEY, testApp, testDb } from '../setup.js'
 
 const authHeader = { authorization: `Bearer ${TEST_API_KEY}` }
 
-async function insertMonitor(name: string): Promise<number> {
+// Callers pass a human-readable label; a unique suffix is appended since the test DB is shared
+// and never truncated between runs (ADR-005), these rows are never deleted, and monitors.name is
+// now unique.
+async function insertMonitor(label: string): Promise<number> {
   const row = await testDb
     .insertInto('monitors')
     .values({
-      name,
+      name: `${label} ${Date.now()}-${Math.random()}`,
       type: 'tcp',
       enabled: false,
       interval_seconds: 10,
