@@ -24,6 +24,7 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-overcheck}:${POSTGRES_PASSWORD:-overcheck}@postgres:5432/${POSTGRES_DB:-overcheck}
       PORT: 3000
+      API_KEY: ${API_KEY:-dev-api-key}
     ports:
       - '3000:3000'
     depends_on:
