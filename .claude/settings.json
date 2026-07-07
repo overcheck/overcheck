@@ -58,7 +58,6 @@
       "Bash(git push --force*)",
       "Bash(git push -f*)",
       "Bash(rm -rf*)",
-      "Bash(docker compose down -v*)",
       "Bash(sudo *)"
     ],
     "defaultMode": "acceptEdits"
