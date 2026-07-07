@@ -6,5 +6,26 @@
   "engines": {
     "node": ">=24.0.0"
   },
-  "description": "Overcheck CLI (overcheck apply / export) — implemented in Milestone 1.2b"
+  "description": "Overcheck CLI (overcheck apply / export) — implemented in Milestone 1.2b",
+  "bin": {
+    "overcheck": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.49",
+    "ajv": "^8.17.1",
+    "commander": "^12.1.0",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^24.13.2",
+    "tsx": "^4.16.5",
+    "vitest": "^2.0.5"
+  }
 }

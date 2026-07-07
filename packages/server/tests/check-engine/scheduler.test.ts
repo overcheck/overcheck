@@ -8,10 +8,18 @@ import { testDb } from '../setup.js'
 // The row only needs to exist to satisfy check_results' FK — the scheduler in these tests
 // is driven from a hand-built Monitor object (below) with a sub-10s interval for speed, not
 // from fetchEnabledMonitors, so the DB row's interval_seconds (constrained to >=10) is unused.
+// Name must be unique per call: the test DB is shared and never truncated between runs (ADR-005),
+// and monitors.name has a unique constraint.
 async function insertMonitor(host: string, port: number): Promise<number> {
   const row = await testDb
     .insertInto('monitors')
-    .values({ name: 'scheduler test monitor', type: 'tcp', interval_seconds: 10, host, port })
+    .values({
+      name: `scheduler test monitor ${Date.now()}-${Math.random()}`,
+      type: 'tcp',
+      interval_seconds: 10,
+      host,
+      port,
+    })
     .returning('id')
     .executeTakeFirstOrThrow()
   return row.id

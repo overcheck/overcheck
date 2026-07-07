@@ -1,6 +1,7 @@
 # CLAUDE.md — Project Brief for Overcheck
 
 ## Current status (update after every work session)
+- 2026-07-07: Milestone 1.2b done: `@overcheck/cli` (`overcheck apply -f file.yaml` / `overcheck export`), YAML schema for monitors + alert channels, docs at docs/config-as-code.md. Reconciliation matches by `name`, now enforced unique server-side for monitors and alert channels (migration 1700000000003 + 409 on conflict) — status pages stay out of apply/export scope for now (slug-based, separate). Verified end-to-end against a live server: create/update/delete/no-op all behave correctly, export round-trips cleanly through apply. All 42 server tests + 15 CLI tests pass; repo-wide lint/format clean. Next: Milestone 1.3a (multi-user auth) per execution-playbook.md, or start dogfooding on real client infra per the 1.2 exit criteria.
 - 2026-07-06: Name locked: **Overcheck**. GitHub org `overcheck` and npm org `@overcheck` claimed. Domain overcheck.dev to be registered (overcheck.com is squatter-parked at ~$6K — skipping until revenue justifies). USPTO clearance check still pending — do before public launch. Next: create repo, run playbook prompt 1.1a.
 
 ## What this is

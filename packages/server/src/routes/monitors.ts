@@ -4,7 +4,9 @@ import type { Kysely, Selectable } from 'kysely'
 import type { CheckScheduler } from '../check-engine/scheduler.js'
 import { toMonitor } from '../check-engine/repository.js'
 import type { Database, MonitorTable } from '../db/client.js'
-import { sendBadRequest, sendNotFound } from './http-errors.js'
+import { sendBadRequest, sendConflict, sendNotFound } from './http-errors.js'
+
+const UNIQUE_VIOLATION = '23505'
 
 const MonitorType = Type.Union([
   Type.Literal('http'),
@@ -144,25 +146,33 @@ export function registerMonitorRoutes(
       const body = request.body
       if (!validateTypeRequirements(body, reply)) return
 
-      const row = await db
-        .insertInto('monitors')
-        .values({
-          name: body.name,
-          type: body.type,
-          enabled: body.enabled ?? true,
-          interval_seconds: body.intervalSeconds,
-          timeout_ms: body.timeoutMs ?? 5000,
-          retries: body.retries ?? 0,
-          degraded_after_ms: body.degradedAfterMs ?? 2000,
-          http_url: body.httpUrl ?? null,
-          http_method: body.httpMethod ?? 'GET',
-          http_expected_status: body.httpExpectedStatus ?? 200,
-          http_body_contains: body.httpBodyContains ?? null,
-          host: body.host ?? null,
-          port: body.port ?? null,
-        })
-        .returningAll()
-        .executeTakeFirstOrThrow()
+      let row
+      try {
+        row = await db
+          .insertInto('monitors')
+          .values({
+            name: body.name,
+            type: body.type,
+            enabled: body.enabled ?? true,
+            interval_seconds: body.intervalSeconds,
+            timeout_ms: body.timeoutMs ?? 5000,
+            retries: body.retries ?? 0,
+            degraded_after_ms: body.degradedAfterMs ?? 2000,
+            http_url: body.httpUrl ?? null,
+            http_method: body.httpMethod ?? 'GET',
+            http_expected_status: body.httpExpectedStatus ?? 200,
+            http_body_contains: body.httpBodyContains ?? null,
+            host: body.host ?? null,
+            port: body.port ?? null,
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow()
+      } catch (err) {
+        if ((err as { code?: string }).code === UNIQUE_VIOLATION) {
+          return sendConflict(reply, `name "${body.name}" is already in use`)
+        }
+        throw err
+      }
 
       if (row.enabled) scheduler.addMonitor(toMonitor(row))
 
@@ -201,29 +211,39 @@ export function registerMonitorRoutes(
       }
       if (!validateTypeRequirements(merged, reply)) return
 
-      const row = await db
-        .updateTable('monitors')
-        .set({
-          ...(body.name !== undefined && { name: body.name }),
-          ...(body.type !== undefined && { type: body.type }),
-          ...(body.enabled !== undefined && { enabled: body.enabled }),
-          ...(body.intervalSeconds !== undefined && { interval_seconds: body.intervalSeconds }),
-          ...(body.timeoutMs !== undefined && { timeout_ms: body.timeoutMs }),
-          ...(body.retries !== undefined && { retries: body.retries }),
-          ...(body.degradedAfterMs !== undefined && { degraded_after_ms: body.degradedAfterMs }),
-          ...(body.httpUrl !== undefined && { http_url: body.httpUrl }),
-          ...(body.httpMethod !== undefined && { http_method: body.httpMethod }),
-          ...(body.httpExpectedStatus !== undefined && {
-            http_expected_status: body.httpExpectedStatus,
-          }),
-          ...(body.httpBodyContains !== undefined && { http_body_contains: body.httpBodyContains }),
-          ...(body.host !== undefined && { host: body.host }),
-          ...(body.port !== undefined && { port: body.port }),
-          updated_at: new Date().toISOString(),
-        })
-        .where('id', '=', request.params.id)
-        .returningAll()
-        .executeTakeFirstOrThrow()
+      let row
+      try {
+        row = await db
+          .updateTable('monitors')
+          .set({
+            ...(body.name !== undefined && { name: body.name }),
+            ...(body.type !== undefined && { type: body.type }),
+            ...(body.enabled !== undefined && { enabled: body.enabled }),
+            ...(body.intervalSeconds !== undefined && { interval_seconds: body.intervalSeconds }),
+            ...(body.timeoutMs !== undefined && { timeout_ms: body.timeoutMs }),
+            ...(body.retries !== undefined && { retries: body.retries }),
+            ...(body.degradedAfterMs !== undefined && { degraded_after_ms: body.degradedAfterMs }),
+            ...(body.httpUrl !== undefined && { http_url: body.httpUrl }),
+            ...(body.httpMethod !== undefined && { http_method: body.httpMethod }),
+            ...(body.httpExpectedStatus !== undefined && {
+              http_expected_status: body.httpExpectedStatus,
+            }),
+            ...(body.httpBodyContains !== undefined && {
+              http_body_contains: body.httpBodyContains,
+            }),
+            ...(body.host !== undefined && { host: body.host }),
+            ...(body.port !== undefined && { port: body.port }),
+            updated_at: new Date().toISOString(),
+          })
+          .where('id', '=', request.params.id)
+          .returningAll()
+          .executeTakeFirstOrThrow()
+      } catch (err) {
+        if ((err as { code?: string }).code === UNIQUE_VIOLATION) {
+          return sendConflict(reply, `name "${body.name}" is already in use`)
+        }
+        throw err
+      }
 
       if (row.enabled) {
         scheduler.updateMonitor(toMonitor(row))
