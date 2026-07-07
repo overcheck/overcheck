@@ -131,6 +131,35 @@ describe('monitors API', () => {
     expect(response.statusCode).toBe(400)
   })
 
+  it('returns 409 when creating a monitor with a name already in use', async () => {
+    // Unique per run: the test DB is shared and never truncated between runs (ADR-005), so a
+    // fixed name would collide with a leftover row from a previous run instead of exercising
+    // the conflict this test creates itself.
+    const name = `duplicate-monitor-${Date.now()}`
+    const first = await createMonitor({ name })
+    expect(first.statusCode).toBe(201)
+
+    const second = await createMonitor({ name })
+    expect(second.statusCode).toBe(409)
+  })
+
+  it('returns 409 when renaming a monitor to a name already in use', async () => {
+    const nameA = `rename-target-${Date.now()}`
+    const nameB = `rename-source-${Date.now()}`
+    const a = await createMonitor({ name: nameA })
+    expect(a.statusCode).toBe(201)
+    const b = await createMonitor({ name: nameB })
+    expect(b.statusCode).toBe(201)
+
+    const renamed = await testApp.inject({
+      method: 'PATCH',
+      url: `/api/monitors/${b.json().id}`,
+      headers: authHeader,
+      payload: { name: nameA },
+    })
+    expect(renamed.statusCode).toBe(409)
+  })
+
   describe('scheduler integration', () => {
     let server: Server | undefined
 
@@ -145,7 +174,10 @@ describe('monitors API', () => {
       const port = (server.address() as AddressInfo).port
 
       const created = await createMonitor({
-        name: 'live scheduler monitor',
+        // Unique per run: this monitor is disabled rather than deleted below, so it persists in
+        // the shared, never-truncated test DB (ADR-005) and would collide with a leftover row
+        // from a previous run under the name-uniqueness constraint.
+        name: `live scheduler monitor ${Date.now()}`,
         intervalSeconds: 10,
         host: '127.0.0.1',
         port,

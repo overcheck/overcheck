@@ -88,4 +88,53 @@ describe('alert-channels API', () => {
     })
     expect(response.statusCode).toBe(400)
   })
+
+  it('returns 409 when creating an alert channel with a name already in use', async () => {
+    // Unique per run: the test DB is shared and never truncated between runs (ADR-005), so a
+    // fixed name would collide with a leftover row from a previous run instead of exercising
+    // the conflict this test creates itself.
+    const name = `duplicate-channel-${Date.now()}`
+    const first = await testApp.inject({
+      method: 'POST',
+      url: '/api/alert-channels',
+      headers: authHeader,
+      payload: { name, type: 'webhook', config: {} },
+    })
+    expect(first.statusCode).toBe(201)
+
+    const second = await testApp.inject({
+      method: 'POST',
+      url: '/api/alert-channels',
+      headers: authHeader,
+      payload: { name, type: 'webhook', config: {} },
+    })
+    expect(second.statusCode).toBe(409)
+  })
+
+  it('returns 409 when renaming an alert channel to a name already in use', async () => {
+    const nameA = `rename-target-${Date.now()}`
+    const nameB = `rename-source-${Date.now()}`
+    const a = await testApp.inject({
+      method: 'POST',
+      url: '/api/alert-channels',
+      headers: authHeader,
+      payload: { name: nameA, type: 'webhook', config: {} },
+    })
+    expect(a.statusCode).toBe(201)
+    const b = await testApp.inject({
+      method: 'POST',
+      url: '/api/alert-channels',
+      headers: authHeader,
+      payload: { name: nameB, type: 'webhook', config: {} },
+    })
+    expect(b.statusCode).toBe(201)
+
+    const renamed = await testApp.inject({
+      method: 'PATCH',
+      url: `/api/alert-channels/${b.json().id}`,
+      headers: authHeader,
+      payload: { name: nameA },
+    })
+    expect(renamed.statusCode).toBe(409)
+  })
 })

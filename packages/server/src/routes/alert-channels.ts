@@ -2,7 +2,9 @@ import { Type, type Static } from '@sinclair/typebox'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { Kysely, Selectable } from 'kysely'
 import type { AlertChannelTable, Database } from '../db/client.js'
-import { sendNotFound } from './http-errors.js'
+import { sendConflict, sendNotFound } from './http-errors.js'
+
+const UNIQUE_VIOLATION = '23505'
 
 const AlertChannelType = Type.Union([
   Type.Literal('slack'),
@@ -79,16 +81,24 @@ export function registerAlertChannelRoutes(app: FastifyInstance, db: Kysely<Data
     { schema: { body: AlertChannelBody, response: { 201: AlertChannelResponse } } },
     async (request: FastifyRequest<{ Body: AlertChannelBodyT }>, reply) => {
       const body = request.body
-      const row = await db
-        .insertInto('alert_channels')
-        .values({
-          name: body.name,
-          type: body.type,
-          config: JSON.stringify(body.config),
-          enabled: body.enabled ?? true,
-        })
-        .returningAll()
-        .executeTakeFirstOrThrow()
+      let row
+      try {
+        row = await db
+          .insertInto('alert_channels')
+          .values({
+            name: body.name,
+            type: body.type,
+            config: JSON.stringify(body.config),
+            enabled: body.enabled ?? true,
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow()
+      } catch (err) {
+        if ((err as { code?: string }).code === UNIQUE_VIOLATION) {
+          return sendConflict(reply, `name "${body.name}" is already in use`)
+        }
+        throw err
+      }
 
       reply.code(201)
       return rowToApi(row)
@@ -112,18 +122,26 @@ export function registerAlertChannelRoutes(app: FastifyInstance, db: Kysely<Data
       reply,
     ) => {
       const body = request.body
-      const row = await db
-        .updateTable('alert_channels')
-        .set({
-          ...(body.name !== undefined && { name: body.name }),
-          ...(body.type !== undefined && { type: body.type }),
-          ...(body.config !== undefined && { config: JSON.stringify(body.config) }),
-          ...(body.enabled !== undefined && { enabled: body.enabled }),
-          updated_at: new Date().toISOString(),
-        })
-        .where('id', '=', request.params.id)
-        .returningAll()
-        .executeTakeFirst()
+      let row
+      try {
+        row = await db
+          .updateTable('alert_channels')
+          .set({
+            ...(body.name !== undefined && { name: body.name }),
+            ...(body.type !== undefined && { type: body.type }),
+            ...(body.config !== undefined && { config: JSON.stringify(body.config) }),
+            ...(body.enabled !== undefined && { enabled: body.enabled }),
+            updated_at: new Date().toISOString(),
+          })
+          .where('id', '=', request.params.id)
+          .returningAll()
+          .executeTakeFirst()
+      } catch (err) {
+        if ((err as { code?: string }).code === UNIQUE_VIOLATION) {
+          return sendConflict(reply, `name "${body.name}" is already in use`)
+        }
+        throw err
+      }
       if (!row) return sendNotFound(reply, `alert channel ${request.params.id} not found`)
       return rowToApi(row)
     },
