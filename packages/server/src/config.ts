@@ -2,6 +2,7 @@ export interface Config {
   databaseUrl: string
   port: number
   nodeEnv: string
+  checkRetentionDays: number
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -14,5 +15,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseUrl,
     port: Number(env.PORT ?? 3000),
     nodeEnv: env.NODE_ENV ?? 'development',
+    checkRetentionDays: Number(env.CHECK_RETENTION_DAYS ?? 30),
   }
 }
