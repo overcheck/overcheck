@@ -19,17 +19,20 @@ Overcheck: open-source, self-hosted uptime monitoring built for **teams and auto
 - Leave seams for: probe agents (remote check runners), multi-tenant cloud mode, pluggable diagnosis hooks. Do NOT build these in v1.
 
 ## v1 scope (from feature-spec.md — build in this order)
-1. Check engine: HTTP(S), TCP, ping, keyword; retries; degraded state (slow-response) as first-class status
+1. Check engine: HTTP(S), TCP, ping, keyword; retries; intervals ≥10s; degraded state (slow-response) as first-class status
 2. Postgres storage + configurable retention
 3. REST API + OpenAPI docs
 4. YAML config-as-code + CLI apply
 5. Multi-user auth + roles
-6. Alerts: Slack, email, generic webhook (downtime duration included in every alert)
+6. Alerts: Slack, email, generic webhook (downtime duration + degraded-state alerts included in every alert)
 7. Status pages: public, branded, response-time graph, selectable uptime window
 8. 5-minute quickstart: docker compose, seed data
 
 ## Explicitly out of scope for v1
 90+ notification providers, mobile app, plugins, HA/clustering, Docker auto-discovery, host-metrics agents, SAML/SCIM.
+
+## v1.x scope (fast follows, still free — not v1, not "maybe never")
+OIDC SSO · maintenance windows with status-page announcements · SSL/TCP-port cert checks · status-page email subscriptions · Prometheus metrics endpoint · YAML round-trip export (UI edits → YAML)
 
 ## Quality bar
 - A stranger must go zero → monitoring in 5 minutes on a clean VPS
