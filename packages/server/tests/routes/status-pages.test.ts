@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { TEST_API_KEY, testApp, testDb } from '../setup.js'
+import { TEST_ADMIN_TOKEN, testApp, testDb } from '../setup.js'
 
-const authHeader = { authorization: `Bearer ${TEST_API_KEY}` }
+// A getter, not a plain value: TEST_ADMIN_TOKEN is assigned asynchronously in setup.ts's
+// beforeAll, which runs after this module's top-level code, so a plain object here would
+// freeze in the pre-beforeAll `undefined`.
+const authHeader = {
+  get authorization() {
+    return `Bearer ${TEST_ADMIN_TOKEN}`
+  },
+}
 
 // Callers pass a human-readable label; a unique suffix is appended since the test DB is shared
 // and never truncated between runs (ADR-005), these rows are never deleted, and monitors.name is
@@ -23,7 +30,7 @@ async function insertMonitor(label: string): Promise<number> {
 }
 
 describe('status-pages API', () => {
-  it('rejects requests without an API key', async () => {
+  it('rejects requests without a session token', async () => {
     const response = await testApp.inject({ method: 'GET', url: '/api/status-pages' })
     expect(response.statusCode).toBe(401)
   })

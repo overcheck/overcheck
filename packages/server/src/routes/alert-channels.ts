@@ -1,6 +1,7 @@
 import { Type, type Static } from '@sinclair/typebox'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { Kysely, Selectable } from 'kysely'
+import { requireRole } from '../auth.js'
 import type { AlertChannelTable, Database } from '../db/client.js'
 import { sendConflict, sendNotFound } from './http-errors.js'
 
@@ -55,7 +56,10 @@ function rowToApi(row: Selectable<AlertChannelTable>): Static<typeof AlertChanne
 export function registerAlertChannelRoutes(app: FastifyInstance, db: Kysely<Database>): void {
   app.get(
     '/alert-channels',
-    { schema: { response: { 200: Type.Array(AlertChannelResponse) } } },
+    {
+      preHandler: [requireRole('viewer')],
+      schema: { response: { 200: Type.Array(AlertChannelResponse) } },
+    },
     async () => {
       const rows = await db.selectFrom('alert_channels').selectAll().orderBy('id').execute()
       return rows.map(rowToApi)
@@ -64,7 +68,10 @@ export function registerAlertChannelRoutes(app: FastifyInstance, db: Kysely<Data
 
   app.get(
     '/alert-channels/:id',
-    { schema: { params: ParamsWithId, response: { 200: AlertChannelResponse } } },
+    {
+      preHandler: [requireRole('viewer')],
+      schema: { params: ParamsWithId, response: { 200: AlertChannelResponse } },
+    },
     async (request: FastifyRequest<{ Params: Static<typeof ParamsWithId> }>, reply) => {
       const row = await db
         .selectFrom('alert_channels')
@@ -78,7 +85,10 @@ export function registerAlertChannelRoutes(app: FastifyInstance, db: Kysely<Data
 
   app.post(
     '/alert-channels',
-    { schema: { body: AlertChannelBody, response: { 201: AlertChannelResponse } } },
+    {
+      preHandler: [requireRole('editor')],
+      schema: { body: AlertChannelBody, response: { 201: AlertChannelResponse } },
+    },
     async (request: FastifyRequest<{ Body: AlertChannelBodyT }>, reply) => {
       const body = request.body
       let row
@@ -108,6 +118,7 @@ export function registerAlertChannelRoutes(app: FastifyInstance, db: Kysely<Data
   app.patch(
     '/alert-channels/:id',
     {
+      preHandler: [requireRole('editor')],
       schema: {
         params: ParamsWithId,
         body: AlertChannelUpdateBody,
@@ -149,7 +160,10 @@ export function registerAlertChannelRoutes(app: FastifyInstance, db: Kysely<Data
 
   app.delete(
     '/alert-channels/:id',
-    { schema: { params: ParamsWithId, response: { 204: Type.Null() } } },
+    {
+      preHandler: [requireRole('editor')],
+      schema: { params: ParamsWithId, response: { 204: Type.Null() } },
+    },
     async (request: FastifyRequest<{ Params: Static<typeof ParamsWithId> }>, reply) => {
       const result = await db
         .deleteFrom('alert_channels')

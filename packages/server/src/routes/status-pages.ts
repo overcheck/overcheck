@@ -1,6 +1,7 @@
 import { Type, type Static } from '@sinclair/typebox'
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { Kysely } from 'kysely'
+import { requireRole } from '../auth.js'
 import type { Database } from '../db/client.js'
 import { sendConflict, sendNotFound } from './http-errors.js'
 
@@ -66,7 +67,10 @@ async function replaceMonitorAssociations(
 export function registerStatusPageRoutes(app: FastifyInstance, db: Kysely<Database>): void {
   app.get(
     '/status-pages',
-    { schema: { response: { 200: Type.Array(StatusPageResponse) } } },
+    {
+      preHandler: [requireRole('viewer')],
+      schema: { response: { 200: Type.Array(StatusPageResponse) } },
+    },
     async () => {
       const rows = await db.selectFrom('status_pages').selectAll().orderBy('id').execute()
       return Promise.all(
@@ -84,7 +88,10 @@ export function registerStatusPageRoutes(app: FastifyInstance, db: Kysely<Databa
 
   app.get(
     '/status-pages/:id',
-    { schema: { params: ParamsWithId, response: { 200: StatusPageResponse } } },
+    {
+      preHandler: [requireRole('viewer')],
+      schema: { params: ParamsWithId, response: { 200: StatusPageResponse } },
+    },
     async (request: FastifyRequest<{ Params: Static<typeof ParamsWithId> }>, reply) => {
       const row = await db
         .selectFrom('status_pages')
@@ -105,8 +112,11 @@ export function registerStatusPageRoutes(app: FastifyInstance, db: Kysely<Databa
 
   app.post(
     '/status-pages',
-    { schema: { body: StatusPageBody, response: { 201: StatusPageResponse } } },
-    async (request: FastifyRequest<{ Body: StatusPageBodyT }>, reply: FastifyReply) => {
+    {
+      preHandler: [requireRole('editor')],
+      schema: { body: StatusPageBody, response: { 201: StatusPageResponse } },
+    },
+    async (request: FastifyRequest<{ Body: StatusPageBodyT }>, reply) => {
       const body = request.body
       let row
       try {
@@ -141,6 +151,7 @@ export function registerStatusPageRoutes(app: FastifyInstance, db: Kysely<Databa
   app.patch(
     '/status-pages/:id',
     {
+      preHandler: [requireRole('editor')],
       schema: {
         params: ParamsWithId,
         body: StatusPageUpdateBody,
@@ -192,7 +203,10 @@ export function registerStatusPageRoutes(app: FastifyInstance, db: Kysely<Databa
 
   app.delete(
     '/status-pages/:id',
-    { schema: { params: ParamsWithId, response: { 204: Type.Null() } } },
+    {
+      preHandler: [requireRole('editor')],
+      schema: { params: ParamsWithId, response: { 204: Type.Null() } },
+    },
     async (request: FastifyRequest<{ Params: Static<typeof ParamsWithId> }>, reply) => {
       const result = await db
         .deleteFrom('status_pages')
