@@ -1,0 +1,10 @@
+{
+  "name": "@overcheck/cli",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "description": "Overcheck CLI (overcheck apply / export) — implemented in Milestone 1.2b"
+}
