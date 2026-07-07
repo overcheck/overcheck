@@ -1,0 +1,7 @@
+node_modules
+dist
+coverage
+docs/
+CLAUDE.md
+README.md
+.claude/
