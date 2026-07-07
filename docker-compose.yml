@@ -11,10 +11,24 @@ services:
     volumes:
       - overcheck_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-overcheck}']
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-overcheck} -d ${POSTGRES_DB:-overcheck}']
       interval: 5s
       timeout: 5s
       retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: packages/server/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-overcheck}:${POSTGRES_PASSWORD:-overcheck}@postgres:5432/${POSTGRES_DB:-overcheck}
+      PORT: 3000
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   overcheck_postgres_data:
