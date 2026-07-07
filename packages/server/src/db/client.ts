@@ -30,9 +30,38 @@ export interface CheckResultTable {
   checked_at: ColumnType<Date, string | undefined, never>
 }
 
+export interface AlertChannelTable {
+  id: Generated<number>
+  name: string
+  type: 'slack' | 'webhook' | 'email'
+  // pg returns jsonb columns already parsed on select, but node-postgres does not
+  // serialize JS objects for you on insert/update — callers must JSON.stringify first.
+  config: ColumnType<unknown, string, string>
+  enabled: boolean
+  created_at: ColumnType<Date, string | undefined, never>
+  updated_at: ColumnType<Date, string | undefined, string | undefined>
+}
+
+export interface StatusPageTable {
+  id: Generated<number>
+  name: string
+  slug: string
+  created_at: ColumnType<Date, string | undefined, never>
+  updated_at: ColumnType<Date, string | undefined, string | undefined>
+}
+
+export interface StatusPageMonitorTable {
+  status_page_id: number
+  monitor_id: number
+  sort_order: number
+}
+
 export interface Database {
   monitors: MonitorTable
   check_results: CheckResultTable
+  alert_channels: AlertChannelTable
+  status_pages: StatusPageTable
+  status_page_monitors: StatusPageMonitorTable
 }
 
 export function createDbClient(connectionString: string): Kysely<Database> {

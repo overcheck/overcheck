@@ -2,7 +2,7 @@ import type { Kysely, Selectable } from 'kysely'
 import type { Database, MonitorTable } from '../db/client.js'
 import type { CheckOutcome, Monitor } from './types.js'
 
-function toMonitor(row: Selectable<MonitorTable>): Monitor {
+export function toMonitor(row: Selectable<MonitorTable>): Monitor {
   const base = {
     id: row.id,
     name: row.name,
