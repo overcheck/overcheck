@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
-import { TEST_ADMIN_TOKEN, testApp } from '../setup.js'
+import { createServer } from 'node:http'
+import type { AddressInfo, Server } from 'node:http'
+import { afterEach, describe, expect, it } from 'vitest'
+import { TEST_ADMIN_TOKEN, createTestUser, testApp } from '../setup.js'
 
 // A getter, not a plain value: TEST_ADMIN_TOKEN is assigned asynchronously in setup.ts's
 // beforeAll, which runs after this module's top-level code, so a plain object here would
@@ -143,5 +145,118 @@ describe('alert-channels API', () => {
       payload: { name: nameA },
     })
     expect(renamed.statusCode).toBe(409)
+  })
+
+  describe('POST /alert-channels/:id/test', () => {
+    let server: Server | undefined
+
+    afterEach(async () => {
+      if (server?.listening) await new Promise((res) => server?.close(() => res(undefined)))
+      server = undefined
+    })
+
+    it('returns 404 for an unknown channel', async () => {
+      const response = await testApp.inject({
+        method: 'POST',
+        url: '/api/alert-channels/999999/test',
+        headers: authHeader,
+      })
+      expect(response.statusCode).toBe(404)
+    })
+
+    it('returns success when the webhook receiver accepts the test alert', async () => {
+      server = createServer((_req, res) => {
+        res.statusCode = 200
+        res.end()
+      })
+      await new Promise<void>((res) => server?.listen(0, '127.0.0.1', res))
+      const port = (server.address() as AddressInfo).port
+
+      const created = await testApp.inject({
+        method: 'POST',
+        url: '/api/alert-channels',
+        headers: authHeader,
+        payload: {
+          name: `testable webhook ${Date.now()}`,
+          type: 'webhook',
+          config: { url: `http://127.0.0.1:${port}/hook` },
+        },
+      })
+      expect(created.statusCode).toBe(201)
+
+      const tested = await testApp.inject({
+        method: 'POST',
+        url: `/api/alert-channels/${created.json().id}/test`,
+        headers: authHeader,
+      })
+      expect(tested.statusCode).toBe(200)
+      expect(tested.json()).toEqual({ success: true })
+    })
+
+    it('returns 502 with an error when the send fails', async () => {
+      const created = await testApp.inject({
+        method: 'POST',
+        url: '/api/alert-channels',
+        headers: authHeader,
+        payload: {
+          name: `unreachable webhook ${Date.now()}`,
+          type: 'webhook',
+          config: { url: 'http://127.0.0.1:1/unreachable' },
+        },
+      })
+      expect(created.statusCode).toBe(201)
+
+      const tested = await testApp.inject({
+        method: 'POST',
+        url: `/api/alert-channels/${created.json().id}/test`,
+        headers: authHeader,
+      })
+      expect(tested.statusCode).toBe(502)
+      expect(tested.json().success).toBe(false)
+      expect(tested.json().error).toBeTruthy()
+    })
+
+    it('returns 502 with a clear error for an email channel when SMTP is not configured', async () => {
+      const created = await testApp.inject({
+        method: 'POST',
+        url: '/api/alert-channels',
+        headers: authHeader,
+        payload: {
+          name: `email channel ${Date.now()}`,
+          type: 'email',
+          config: { to: 'oncall@example.com' },
+        },
+      })
+      expect(created.statusCode).toBe(201)
+
+      const tested = await testApp.inject({
+        method: 'POST',
+        url: `/api/alert-channels/${created.json().id}/test`,
+        headers: authHeader,
+      })
+      expect(tested.statusCode).toBe(502)
+      expect(tested.json().error).toMatch(/SMTP_HOST/)
+    })
+
+    it('rejects viewers with 403', async () => {
+      const created = await testApp.inject({
+        method: 'POST',
+        url: '/api/alert-channels',
+        headers: authHeader,
+        payload: {
+          name: `viewer test channel ${Date.now()}`,
+          type: 'webhook',
+          config: { url: 'https://example.com/hook' },
+        },
+      })
+      const viewer = await createTestUser('viewer')
+
+      const tested = await testApp.inject({
+        method: 'POST',
+        url: `/api/alert-channels/${created.json().id}/test`,
+        headers: { authorization: `Bearer ${viewer.token}` },
+      })
+      expect(tested.statusCode).toBe(403)
+    })
   })
 })

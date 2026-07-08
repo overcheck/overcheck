@@ -6,7 +6,10 @@ export interface ExportOptions {
   output?: string
 }
 
-function monitorToYaml(monitor: MonitorResource): Record<string, unknown> {
+function monitorToYaml(
+  monitor: MonitorResource,
+  alertChannelNames: string[],
+): Record<string, unknown> {
   const entry: Record<string, unknown> = {
     name: monitor.name,
     type: monitor.type,
@@ -24,6 +27,7 @@ function monitorToYaml(monitor: MonitorResource): Record<string, unknown> {
   if (monitor.httpBodyContains !== null) entry.httpBodyContains = monitor.httpBodyContains
   if (monitor.host !== null) entry.host = monitor.host
   if (monitor.port !== null) entry.port = monitor.port
+  if (alertChannelNames.length > 0) entry.alertChannels = alertChannelNames
   return entry
 }
 
@@ -41,9 +45,22 @@ export async function runExport(client: OvercheckClient, options: ExportOptions)
     client.listMonitors(),
     client.listAlertChannels(),
   ])
+  const channelNameById = new Map(alertChannels.map((c) => [c.id, c.name]))
+
+  // One assignment lookup per monitor — export runs at CLI-invocation cadence for modest monitor
+  // counts, so the N+1 calls aren't worth batching against yet.
+  const monitorEntries = await Promise.all(
+    monitors.map(async (monitor) => {
+      const { alertChannelIds } = await client.getMonitorAlertChannels(monitor.id)
+      const alertChannelNames = alertChannelIds
+        .map((id) => channelNameById.get(id))
+        .filter((name): name is string => name !== undefined)
+      return monitorToYaml(monitor, alertChannelNames)
+    }),
+  )
 
   const doc = {
-    monitors: monitors.map(monitorToYaml),
+    monitors: monitorEntries,
     alertChannels: alertChannels.map(alertChannelToYaml),
   }
   const yaml = dump(doc, { sortKeys: false })

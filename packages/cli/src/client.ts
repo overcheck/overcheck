@@ -92,4 +92,15 @@ export class OvercheckClient {
   deleteAlertChannel(id: number): Promise<void> {
     return this.request('DELETE', `/api/alert-channels/${id}`)
   }
+
+  getMonitorAlertChannels(monitorId: number): Promise<{ alertChannelIds: number[] }> {
+    return this.request('GET', `/api/monitors/${monitorId}/alert-channels`)
+  }
+
+  putMonitorAlertChannels(
+    monitorId: number,
+    alertChannelIds: number[],
+  ): Promise<{ alertChannelIds: number[] }> {
+    return this.request('PUT', `/api/monitors/${monitorId}/alert-channels`, { alertChannelIds })
+  }
 }

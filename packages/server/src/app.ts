@@ -2,6 +2,7 @@ import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
 import Fastify, { type FastifyInstance } from 'fastify'
 import type { Kysely } from 'kysely'
+import type { SmtpConfig } from './alerting/types.js'
 import { registerSessionAuth } from './auth.js'
 import type { CheckScheduler } from './check-engine/scheduler.js'
 import type { Database } from './db/client.js'
@@ -16,6 +17,8 @@ export async function buildApp(
   db: Kysely<Database>,
   scheduler: CheckScheduler,
   sessionTtlHours: number,
+  smtp: SmtpConfig | undefined = undefined,
+  alertTimeoutMs = 5000,
 ): Promise<FastifyInstance> {
   const app = Fastify({ logger: true })
 
@@ -37,7 +40,7 @@ export async function buildApp(
         registerAuthProtectedRoutes(authed, db)
         registerUserRoutes(authed, db)
         registerMonitorRoutes(authed, db, scheduler)
-        registerAlertChannelRoutes(authed, db)
+        registerAlertChannelRoutes(authed, db, smtp, alertTimeoutMs)
         registerStatusPageRoutes(authed, db)
       })
     },

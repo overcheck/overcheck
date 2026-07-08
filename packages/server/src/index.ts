@@ -1,3 +1,4 @@
+import { createAlertDispatcher } from './alerting/dispatch.js'
 import { buildApp } from './app.js'
 import { CheckScheduler } from './check-engine/scheduler.js'
 import { fetchEnabledMonitors } from './check-engine/repository.js'
@@ -13,11 +14,18 @@ async function main(): Promise<void> {
 
   const db = createDbClient(config.databaseUrl)
 
+  const dispatchAlerts = createAlertDispatcher(db, config.smtp, config.alertTimeoutMs)
   const monitors = await fetchEnabledMonitors(db)
-  const scheduler = new CheckScheduler(db)
+  const scheduler = new CheckScheduler(db, undefined, dispatchAlerts)
   scheduler.start(monitors)
 
-  const app = await buildApp(db, scheduler, config.sessionTtlHours)
+  const app = await buildApp(
+    db,
+    scheduler,
+    config.sessionTtlHours,
+    config.smtp,
+    config.alertTimeoutMs,
+  )
 
   const retention = startRetentionLoop(db, config.checkRetentionDays)
 

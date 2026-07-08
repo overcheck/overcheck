@@ -3,9 +3,9 @@ import type { Database } from '../db/client.js'
 import { httpExecutor } from './executors/http.js'
 import { createPingExecutor } from './executors/ping.js'
 import { tcpExecutor } from './executors/tcp.js'
-import { insertCheckResult } from './repository.js'
+import { insertCheckResultAndDetectTransition } from './repository.js'
 import { runWithRetries } from './status.js'
-import type { Executor, Monitor } from './types.js'
+import type { Executor, Monitor, StateTransition } from './types.js'
 
 function defaultExecutorFor(monitor: Monitor): Executor {
   switch (monitor.type) {
@@ -28,6 +28,10 @@ export class CheckScheduler {
   constructor(
     private readonly db: Kysely<Database>,
     private readonly executorFor: (monitor: Monitor) => Executor = defaultExecutorFor,
+    private readonly dispatchAlerts: (
+      monitor: Monitor,
+      transition: StateTransition,
+    ) => Promise<void> = async () => {},
   ) {}
 
   start(monitors: Monitor[]): void {
@@ -91,6 +95,9 @@ export class CheckScheduler {
     // The monitor may have been removed (e.g. deleted via the API) while this check was
     // in flight — skip the write rather than violate check_results' FK to monitors.
     if (!this.monitors.has(monitor.id)) return
-    await insertCheckResult(this.db, monitor.id, outcome)
+    const transition = await insertCheckResultAndDetectTransition(this.db, monitor.id, outcome)
+    if (transition.previousStatus !== null && transition.previousStatus !== transition.newStatus) {
+      await this.dispatchAlerts(monitor, transition)
+    }
   }
 }

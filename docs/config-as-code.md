@@ -86,6 +86,7 @@ the remaining fields are required depends on `type`.
 | `httpBodyContains` | string | required for `keyword` | Response body substring to match. |
 | `host` | string | required for `tcp`, `ping` | |
 | `port` | integer (1–65535) | required for `tcp` | |
+| `alertChannels` | string[] | no | Names of `alertChannels` entries (in this file or already on the server) to assign to this monitor. Reconciled separately from the rest of the entry: unlike other fields, it's a full-replace of the monitor's assignments, applied after all monitors and alertChannels in the file have been created/updated, so a channel defined earlier in the same file can be referenced immediately. Omitting the field leaves existing assignments untouched; an empty list (`alertChannels: []`) clears them. |
 
 ### `alertChannels`
 
@@ -104,7 +105,8 @@ monitors:
     type: http
     httpUrl: https://example.com
     intervalSeconds: 60
-    degradedAfterMs: 800
+    degradedAfterMs: 800   # alert on slow, not just down
+    alertChannels: [oncall-slack]
 
   - name: api-health
     type: keyword
