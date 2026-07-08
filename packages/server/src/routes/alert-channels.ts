@@ -1,6 +1,8 @@
 import { Type, type Static } from '@sinclair/typebox'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { Kysely, Selectable } from 'kysely'
+import { sendToChannel } from '../alerting/dispatch.js'
+import type { AlertMessage, SmtpConfig } from '../alerting/types.js'
 import { requireRole } from '../auth.js'
 import type { AlertChannelTable, Database } from '../db/client.js'
 import { sendConflict, sendNotFound } from './http-errors.js'
@@ -53,7 +55,17 @@ function rowToApi(row: Selectable<AlertChannelTable>): Static<typeof AlertChanne
   }
 }
 
-export function registerAlertChannelRoutes(app: FastifyInstance, db: Kysely<Database>): void {
+const TestAlertResponse = Type.Object({
+  success: Type.Boolean(),
+  error: Type.Optional(Type.String()),
+})
+
+export function registerAlertChannelRoutes(
+  app: FastifyInstance,
+  db: Kysely<Database>,
+  smtp: SmtpConfig | undefined,
+  alertTimeoutMs: number,
+): void {
   app.get(
     '/alert-channels',
     {
@@ -173,6 +185,41 @@ export function registerAlertChannelRoutes(app: FastifyInstance, db: Kysely<Data
         return sendNotFound(reply, `alert channel ${request.params.id} not found`)
       }
       reply.code(204)
+    },
+  )
+
+  app.post(
+    '/alert-channels/:id/test',
+    {
+      preHandler: [requireRole('editor')],
+      schema: {
+        params: ParamsWithId,
+        response: { 200: TestAlertResponse, 502: TestAlertResponse },
+      },
+    },
+    async (request: FastifyRequest<{ Params: Static<typeof ParamsWithId> }>, reply) => {
+      const channel = await db
+        .selectFrom('alert_channels')
+        .selectAll()
+        .where('id', '=', request.params.id)
+        .executeTakeFirst()
+      if (!channel) return sendNotFound(reply, `alert channel ${request.params.id} not found`)
+
+      const testMessage: AlertMessage = {
+        monitorName: 'Test Monitor',
+        previousStatus: 'up',
+        newStatus: 'down',
+        errorMessage: 'This is a test alert from Overcheck.',
+        downtimeDurationMs: null,
+      }
+
+      try {
+        await sendToChannel(channel, testMessage, smtp, alertTimeoutMs)
+        return { success: true }
+      } catch (err) {
+        reply.code(502)
+        return { success: false, error: err instanceof Error ? err.message : 'unknown error' }
+      }
     },
   )
 }

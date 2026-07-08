@@ -26,18 +26,25 @@ docker compose up -d
 
 ```yaml
 # monitors.yaml — version-controlled, applied on deploy
-- name: marketing-site
-  type: http
-  url: https://example.com
-  interval: 60s
-  degraded_after: 800ms   # alert on slow, not just down
-  alerts: [slack-ops]
+monitors:
+  - name: marketing-site
+    type: http
+    httpUrl: https://example.com
+    intervalSeconds: 60
+    degradedAfterMs: 800   # alert on slow, not just down
+    alertChannels: [oncall-slack]
 
-- name: api-health
-  type: http
-  url: https://api.example.com/health
-  keyword: '"status":"ok"'
-  interval: 30s
+  - name: api-health
+    type: keyword
+    httpUrl: https://api.example.com/health
+    httpBodyContains: '"status":"ok"'
+    intervalSeconds: 30
+
+alertChannels:
+  - name: oncall-slack
+    type: slack
+    config:
+      webhookUrl: https://hooks.slack.com/services/T000/B000/XXXX
 ```
 
 ```bash

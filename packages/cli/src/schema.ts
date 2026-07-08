@@ -26,6 +26,11 @@ export const MonitorEntry = Type.Object({
   httpBodyContains: Type.Optional(Type.String()),
   host: Type.Optional(Type.String()),
   port: Type.Optional(Type.Integer({ minimum: 1, maximum: 65535 })),
+  // Names of alertChannels entries (either in this file or already on the server) to assign to
+  // this monitor. Reconciled separately from the rest of MonitorEntry, after monitors and
+  // alertChannels are both applied — see resolveAlertChannelAssignments in commands/apply.ts —
+  // since it's a full-replace call against a junction table, not a patchable monitor field.
+  alertChannels: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
 })
 
 const AlertChannelType = Type.Union([

@@ -71,6 +71,24 @@ describe('parseConfigDocument', () => {
     ).toThrow(/duplicate monitor name/)
   })
 
+  it('accepts a monitor with an alertChannels list', () => {
+    const doc = parseConfigDocument(
+      {
+        monitors: [
+          {
+            name: 'api',
+            type: 'http',
+            httpUrl: 'https://example.com',
+            intervalSeconds: 30,
+            alertChannels: ['ops-slack'],
+          },
+        ],
+      },
+      'test.yaml',
+    )
+    expect(doc.monitors?.[0]?.alertChannels).toEqual(['ops-slack'])
+  })
+
   it('rejects duplicate alert channel names', () => {
     expect(() =>
       parseConfigDocument(

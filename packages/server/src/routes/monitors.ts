@@ -288,4 +288,96 @@ export function registerMonitorRoutes(
       reply.code(204)
     },
   )
+
+  const AlertChannelIdsBody = Type.Object({
+    alertChannelIds: Type.Array(Type.Integer()),
+  })
+  const AlertChannelIdsResponse = Type.Object({
+    alertChannelIds: Type.Array(Type.Integer()),
+  })
+
+  app.get(
+    '/monitors/:id/alert-channels',
+    {
+      preHandler: [requireRole('viewer')],
+      schema: { params: ParamsWithId, response: { 200: AlertChannelIdsResponse } },
+    },
+    async (request: FastifyRequest<{ Params: Static<typeof ParamsWithId> }>, reply) => {
+      const monitor = await db
+        .selectFrom('monitors')
+        .select('id')
+        .where('id', '=', request.params.id)
+        .executeTakeFirst()
+      if (!monitor) return sendNotFound(reply, `monitor ${request.params.id} not found`)
+
+      const rows = await db
+        .selectFrom('monitor_alert_channels')
+        .select('alert_channel_id')
+        .where('monitor_id', '=', request.params.id)
+        .orderBy('alert_channel_id')
+        .execute()
+
+      return { alertChannelIds: rows.map((row) => row.alert_channel_id) }
+    },
+  )
+
+  app.put(
+    '/monitors/:id/alert-channels',
+    {
+      preHandler: [requireRole('editor')],
+      schema: {
+        params: ParamsWithId,
+        body: AlertChannelIdsBody,
+        response: { 200: AlertChannelIdsResponse },
+      },
+    },
+    async (
+      request: FastifyRequest<{
+        Params: Static<typeof ParamsWithId>
+        Body: Static<typeof AlertChannelIdsBody>
+      }>,
+      reply,
+    ) => {
+      const monitor = await db
+        .selectFrom('monitors')
+        .select('id')
+        .where('id', '=', request.params.id)
+        .executeTakeFirst()
+      if (!monitor) return sendNotFound(reply, `monitor ${request.params.id} not found`)
+
+      const alertChannelIds = [...new Set(request.body.alertChannelIds)]
+      if (alertChannelIds.length > 0) {
+        const existing = await db
+          .selectFrom('alert_channels')
+          .select('id')
+          .where('id', 'in', alertChannelIds)
+          .execute()
+        const existingIds = new Set(existing.map((row) => row.id))
+        const missing = alertChannelIds.find((id) => !existingIds.has(id))
+        if (missing !== undefined) {
+          return sendBadRequest(reply, `alert channel ${missing} does not exist`)
+        }
+      }
+
+      await db.transaction().execute(async (trx) => {
+        await trx
+          .deleteFrom('monitor_alert_channels')
+          .where('monitor_id', '=', request.params.id)
+          .execute()
+        if (alertChannelIds.length > 0) {
+          await trx
+            .insertInto('monitor_alert_channels')
+            .values(
+              alertChannelIds.map((alertChannelId) => ({
+                monitor_id: request.params.id,
+                alert_channel_id: alertChannelId,
+              })),
+            )
+            .execute()
+        }
+      })
+
+      return { alertChannelIds }
+    },
+  )
 }
