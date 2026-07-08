@@ -45,3 +45,10 @@ export interface CheckOutcome {
   responseTimeMs: number
   errorMessage: string | null
 }
+
+export interface StateTransition {
+  previousStatus: CheckStatus | null
+  newStatus: CheckStatus
+  errorMessage: string | null
+  downtimeDurationMs: number | null
+}

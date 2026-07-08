@@ -1,6 +1,6 @@
 import type { Kysely, Selectable } from 'kysely'
 import type { Database, MonitorTable } from '../db/client.js'
-import type { CheckOutcome, Monitor } from './types.js'
+import type { CheckOutcome, Monitor, StateTransition } from './types.js'
 
 export function toMonitor(row: Selectable<MonitorTable>): Monitor {
   const base = {
@@ -45,12 +45,26 @@ export async function fetchEnabledMonitors(db: Kysely<Database>): Promise<Monito
   return rows.map(toMonitor)
 }
 
-export async function insertCheckResult(
+/**
+ * Inserts a check result and reports whether it represents a status change from the
+ * monitor's previous check. The previous row is read before the insert rather than derived
+ * from some cached "current state" — check_results is the only source of truth for status
+ * history, so there's nothing else to keep in sync.
+ */
+export async function insertCheckResultAndDetectTransition(
   db: Kysely<Database>,
   monitorId: number,
   outcome: CheckOutcome,
-): Promise<void> {
-  await db
+): Promise<StateTransition> {
+  const previous = await db
+    .selectFrom('check_results')
+    .select(['status'])
+    .where('monitor_id', '=', monitorId)
+    .orderBy('checked_at', 'desc')
+    .limit(1)
+    .executeTakeFirst()
+
+  const inserted = await db
     .insertInto('check_results')
     .values({
       monitor_id: monitorId,
@@ -58,7 +72,31 @@ export async function insertCheckResult(
       response_time_ms: Math.round(outcome.responseTimeMs),
       error_message: outcome.errorMessage,
     })
-    .execute()
+    .returning(['checked_at'])
+    .executeTakeFirstOrThrow()
+
+  let downtimeDurationMs: number | null = null
+  if (outcome.status === 'up' && previous && previous.status !== 'up') {
+    const lastUp = await db
+      .selectFrom('check_results')
+      .select(['checked_at'])
+      .where('monitor_id', '=', monitorId)
+      .where('status', '=', 'up')
+      .where('checked_at', '<', inserted.checked_at)
+      .orderBy('checked_at', 'desc')
+      .limit(1)
+      .executeTakeFirst()
+    if (lastUp) {
+      downtimeDurationMs = inserted.checked_at.getTime() - lastUp.checked_at.getTime()
+    }
+  }
+
+  return {
+    previousStatus: previous?.status ?? null,
+    newStatus: outcome.status,
+    errorMessage: outcome.errorMessage,
+    downtimeDurationMs,
+  }
 }
 
 export async function pruneOldCheckResults(

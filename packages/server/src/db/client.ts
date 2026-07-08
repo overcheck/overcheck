@@ -56,6 +56,11 @@ export interface StatusPageMonitorTable {
   sort_order: number
 }
 
+export interface MonitorAlertChannelTable {
+  monitor_id: number
+  alert_channel_id: number
+}
+
 export interface UserTable {
   id: Generated<number>
   email: string
@@ -79,6 +84,7 @@ export interface Database {
   alert_channels: AlertChannelTable
   status_pages: StatusPageTable
   status_page_monitors: StatusPageMonitorTable
+  monitor_alert_channels: MonitorAlertChannelTable
   users: UserTable
   sessions: SessionTable
 }
