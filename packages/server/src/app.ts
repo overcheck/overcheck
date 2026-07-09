@@ -9,7 +9,10 @@ import type { Database } from './db/client.js'
 import { registerAlertChannelRoutes } from './routes/alert-channels.js'
 import { registerAuthProtectedRoutes, registerAuthPublicRoutes } from './routes/auth.js'
 import { registerHealthRoute } from './routes/health.js'
+import { registerIncidentRoutes } from './routes/incidents.js'
 import { registerMonitorRoutes } from './routes/monitors.js'
+import { registerPublicStatusPageRoutes } from './routes/public-status-pages.js'
+import { registerStatusPageHtmlRoute } from './routes/status-page-html.js'
 import { registerStatusPageRoutes } from './routes/status-pages.js'
 import { registerUserRoutes } from './routes/users.js'
 
@@ -19,6 +22,7 @@ export async function buildApp(
   sessionTtlHours: number,
   smtp: SmtpConfig | undefined = undefined,
   alertTimeoutMs = 5000,
+  checkRetentionDays = 90,
 ): Promise<FastifyInstance> {
   const app = Fastify({ logger: true })
 
@@ -30,10 +34,12 @@ export async function buildApp(
   await app.register(swaggerUi, { routePrefix: '/api/docs' })
 
   registerHealthRoute(app, db)
+  registerStatusPageHtmlRoute(app, db, checkRetentionDays)
 
   await app.register(
     async (api) => {
       registerAuthPublicRoutes(api, db, sessionTtlHours)
+      registerPublicStatusPageRoutes(api, db, checkRetentionDays)
 
       await api.register(async (authed) => {
         await registerSessionAuth(authed, db)
@@ -42,6 +48,7 @@ export async function buildApp(
         registerMonitorRoutes(authed, db, scheduler)
         registerAlertChannelRoutes(authed, db, smtp, alertTimeoutMs)
         registerStatusPageRoutes(authed, db)
+        registerIncidentRoutes(authed, db)
       })
     },
     { prefix: '/api' },

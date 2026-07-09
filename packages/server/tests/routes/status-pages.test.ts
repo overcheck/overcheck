@@ -35,7 +35,7 @@ describe('status-pages API', () => {
     expect(response.statusCode).toBe(401)
   })
 
-  it('creates a status page with associated monitors, then updates the association', async () => {
+  it('creates a status page with branding and grouped monitors, then updates the association', async () => {
     const monitorA = await insertMonitor('status page monitor a')
     const monitorB = await insertMonitor('status page monitor b')
 
@@ -43,28 +43,42 @@ describe('status-pages API', () => {
       method: 'POST',
       url: '/api/status-pages',
       headers: authHeader,
-      payload: { name: 'Public Status', slug: 'public-status', monitorIds: [monitorA, monitorB] },
+      payload: {
+        name: 'Public Status',
+        slug: 'public-status',
+        logoUrl: 'https://example.com/logo.png',
+        accentColor: 'oklch(0.5 0.1 195)',
+        monitors: [{ monitorId: monitorA, groupName: 'Core' }, { monitorId: monitorB }],
+      },
     })
     expect(created.statusCode).toBe(201)
     const page = created.json()
-    expect(page).toMatchObject({ name: 'Public Status', slug: 'public-status' })
-    expect(page.monitorIds).toEqual([monitorA, monitorB])
+    expect(page).toMatchObject({
+      name: 'Public Status',
+      slug: 'public-status',
+      logoUrl: 'https://example.com/logo.png',
+      accentColor: 'oklch(0.5 0.1 195)',
+    })
+    expect(page.monitors).toEqual([
+      { monitorId: monitorA, groupName: 'Core' },
+      { monitorId: monitorB, groupName: null },
+    ])
 
     const fetched = await testApp.inject({
       method: 'GET',
       url: `/api/status-pages/${page.id}`,
       headers: authHeader,
     })
-    expect(fetched.json().monitorIds).toEqual([monitorA, monitorB])
+    expect(fetched.json().monitors).toEqual(page.monitors)
 
     const updated = await testApp.inject({
       method: 'PATCH',
       url: `/api/status-pages/${page.id}`,
       headers: authHeader,
-      payload: { monitorIds: [monitorB] },
+      payload: { monitors: [{ monitorId: monitorB, groupName: 'Renamed' }] },
     })
     expect(updated.statusCode).toBe(200)
-    expect(updated.json().monitorIds).toEqual([monitorB])
+    expect(updated.json().monitors).toEqual([{ monitorId: monitorB, groupName: 'Renamed' }])
 
     const deleted = await testApp.inject({
       method: 'DELETE',

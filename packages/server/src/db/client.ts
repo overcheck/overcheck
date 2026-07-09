@@ -46,6 +46,8 @@ export interface StatusPageTable {
   id: Generated<number>
   name: string
   slug: string
+  logo_url: ColumnType<string | null, string | null | undefined, string | null | undefined>
+  accent_color: Generated<string>
   created_at: ColumnType<Date, string | undefined, never>
   updated_at: ColumnType<Date, string | undefined, string | undefined>
 }
@@ -54,11 +56,34 @@ export interface StatusPageMonitorTable {
   status_page_id: number
   monitor_id: number
   sort_order: number
+  group_name: string | null
 }
 
 export interface MonitorAlertChannelTable {
   monitor_id: number
   alert_channel_id: number
+}
+
+export interface IncidentTable {
+  id: Generated<number>
+  status_page_id: number
+  title: string
+  status: 'investigating' | 'identified' | 'monitoring' | 'resolved'
+  started_at: ColumnType<Date, string | undefined, never>
+  created_at: ColumnType<Date, string | undefined, never>
+  updated_at: ColumnType<Date, string | undefined, string | undefined>
+}
+
+export interface IncidentUpdateTable {
+  id: Generated<number>
+  incident_id: number
+  body: string
+  created_at: ColumnType<Date, string | undefined, never>
+}
+
+export interface IncidentMonitorTable {
+  incident_id: number
+  monitor_id: number
 }
 
 export interface UserTable {
@@ -87,6 +112,9 @@ export interface Database {
   monitor_alert_channels: MonitorAlertChannelTable
   users: UserTable
   sessions: SessionTable
+  incidents: IncidentTable
+  incident_updates: IncidentUpdateTable
+  incident_monitors: IncidentMonitorTable
 }
 
 export function createDbClient(connectionString: string): Kysely<Database> {

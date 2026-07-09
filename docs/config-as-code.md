@@ -4,7 +4,17 @@ Monitors and alert channels can be declared in a YAML file and synced to a runni
 instance with `@overcheck/cli`, instead of (or alongside) the API/UI. This is the same mechanism
 you'd use to keep monitor definitions in git and apply them on deploy.
 
-Status pages are not yet covered by `apply`/`export` — manage those via the API or UI for now.
+Status pages — including branding, monitor groups, and incidents — are not yet covered by
+`apply`/`export`; manage those via the API or the public/admin status-page routes for now.
+
+## Check retention
+
+The server keeps `check_results` history for `CHECK_RETENTION_DAYS` (default **90** as of the
+status-page feature — it was 30 previously). The public status page's 90-day uptime bar needs a
+full 90 days of history to show anything beyond "no data" for older days, which is why the
+default was raised. Storage grows roughly linearly with monitor count × check frequency × this
+window, so lower it (`CHECK_RETENTION_DAYS=30`) if you're running many high-frequency monitors on
+constrained disk.
 
 ## Install
 
