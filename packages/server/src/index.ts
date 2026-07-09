@@ -26,6 +26,7 @@ async function main(): Promise<void> {
     config.smtp,
     config.alertTimeoutMs,
     config.checkRetentionDays,
+    config.secureCookies,
   )
 
   const retention = startRetentionLoop(db, config.checkRetentionDays)
