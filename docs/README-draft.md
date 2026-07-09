@@ -56,8 +56,14 @@ overcheck apply -f monitors.yaml   # or POST /api/v1/monitors — same thing
 - **Checks:** HTTP(S), TCP, ping, keyword — with retries, degraded state, and downtime-duration in every alert
 - **Teams:** admin / editor / viewer roles; OIDC SSO on the roadmap
 - **Alerting:** Slack, email, webhooks
-- **Status pages:** branded, public, response-time graphs, selectable uptime windows
+- **Status pages:** branded, public, per-group monitors, response-time graphs, selectable
+  24h/7d/30d/90d uptime windows, incident history — server-rendered at `/status/:slug`, no
+  client-side framework
 - **API:** everything the UI does, documented with OpenAPI. The UI is just an API client.
+
+Check history is kept for `CHECK_RETENTION_DAYS` (default 90 days, up from 30 — the status
+page's 90-day uptime bar needs that much history). Lower it if disk is tight on a
+high-frequency-monitor deployment; see [config-as-code.md](config-as-code.md#check-retention).
 
 ## Overcheck Cloud (optional, funds the project)
 

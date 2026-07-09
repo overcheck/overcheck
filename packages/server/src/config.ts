@@ -35,7 +35,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseUrl,
     port: Number(env.PORT ?? 3000),
     nodeEnv: env.NODE_ENV ?? 'development',
-    checkRetentionDays: Number(env.CHECK_RETENTION_DAYS ?? 30),
+    checkRetentionDays: Number(env.CHECK_RETENTION_DAYS ?? 90),
     sessionTtlHours: Number(env.SESSION_TTL_HOURS ?? 168),
     smtp: loadSmtpConfig(env),
     alertTimeoutMs: Number(env.ALERT_TIMEOUT_MS ?? 5000),
