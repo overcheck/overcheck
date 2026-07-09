@@ -3,18 +3,21 @@ import swaggerUi from '@fastify/swagger-ui'
 import Fastify, { type FastifyInstance } from 'fastify'
 import type { Kysely } from 'kysely'
 import type { SmtpConfig } from './alerting/types.js'
-import { registerSessionAuth } from './auth.js'
+import { registerDashboardAuth, registerSessionAuth } from './auth.js'
 import type { CheckScheduler } from './check-engine/scheduler.js'
 import type { Database } from './db/client.js'
 import { registerAlertChannelRoutes } from './routes/alert-channels.js'
 import { registerAuthProtectedRoutes, registerAuthPublicRoutes } from './routes/auth.js'
+import { registerDashboardHtmlRoutes } from './routes/dashboard-html.js'
 import { registerHealthRoute } from './routes/health.js'
 import { registerIncidentRoutes } from './routes/incidents.js'
+import { registerLoginHtmlRoute } from './routes/login-html.js'
 import { registerMonitorRoutes } from './routes/monitors.js'
 import { registerPublicStatusPageRoutes } from './routes/public-status-pages.js'
 import { registerStatusPageHtmlRoute } from './routes/status-page-html.js'
 import { registerStatusPageRoutes } from './routes/status-pages.js'
 import { registerUserRoutes } from './routes/users.js'
+import { registerFormBodyParser } from './utils/form-body.js'
 
 export async function buildApp(
   db: Kysely<Database>,
@@ -23,8 +26,11 @@ export async function buildApp(
   smtp: SmtpConfig | undefined = undefined,
   alertTimeoutMs = 5000,
   checkRetentionDays = 90,
+  secureCookies = true,
 ): Promise<FastifyInstance> {
   const app = Fastify({ logger: true })
+
+  registerFormBodyParser(app)
 
   await app.register(swagger, {
     openapi: {
@@ -35,6 +41,12 @@ export async function buildApp(
 
   registerHealthRoute(app, db)
   registerStatusPageHtmlRoute(app, db, checkRetentionDays)
+  registerLoginHtmlRoute(app, db, sessionTtlHours, secureCookies)
+
+  await app.register(async (dashboard) => {
+    await registerDashboardAuth(dashboard, db)
+    registerDashboardHtmlRoutes(dashboard)
+  })
 
   await app.register(
     async (api) => {

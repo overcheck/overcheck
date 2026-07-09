@@ -5,7 +5,25 @@ import { requireRole } from '../auth.js'
 import type { CheckScheduler } from '../check-engine/scheduler.js'
 import { toMonitor } from '../check-engine/repository.js'
 import type { Database, MonitorTable } from '../db/client.js'
+import {
+  buildSparklinePaths,
+  fetchDailyHistory,
+  fetchHourlyHistory,
+  fetchLatestStatuses,
+  summarizeBuckets,
+} from '../status-page/aggregation.js'
+import { WINDOWS, type Window } from '../status-page/public-data.js'
 import { sendBadRequest, sendConflict, sendNotFound } from './http-errors.js'
+
+const WINDOW_DAYS: Record<Window, number> = { '24h': 1, '7d': 7, '30d': 30, '90d': 90 }
+const DETAIL_CHART_WIDTH = 640
+const DETAIL_CHART_HEIGHT = 120
+const DETAIL_CHART_PAD = 6
+const RECENT_CHECKS_LIMIT = 6
+
+function isWindow(value: unknown): value is Window {
+  return typeof value === 'string' && (WINDOWS as string[]).includes(value)
+}
 
 const UNIQUE_VIOLATION = '23505'
 
@@ -378,6 +396,139 @@ export function registerMonitorRoutes(
       })
 
       return { alertChannelIds }
+    },
+  )
+
+  const WindowQuery = Type.Object({ window: Type.Optional(Type.String()) })
+
+  const StatusSummaryEntry = Type.Object({
+    monitorId: Type.Number(),
+    status: Type.Union([
+      Type.Literal('up'),
+      Type.Literal('degraded'),
+      Type.Literal('down'),
+      Type.Null(),
+    ]),
+    uptimePercent: Type.Union([Type.Number(), Type.Null()]),
+    responseTimeMs: Type.Union([Type.Number(), Type.Null()]),
+  })
+
+  // Bulk per-monitor status/uptime/response-time, windowed — the dashboard's monitor-list
+  // screen needs this for every row, and a single bulk endpoint avoids one HTTP round-trip
+  // per monitor from the dashboard (the underlying per-monitor bucket queries still run
+  // server-side, same as the public status page does per monitor group).
+  app.get<{ Querystring: Static<typeof WindowQuery> }>(
+    '/monitors/status-summary',
+    {
+      preHandler: [requireRole('viewer')],
+      schema: {
+        querystring: WindowQuery,
+        response: { 200: Type.Array(StatusSummaryEntry) },
+      },
+    },
+    async (request) => {
+      const window: Window = isWindow(request.query.window) ? request.query.window : '24h'
+
+      const monitors = await db.selectFrom('monitors').select(['id']).orderBy('id').execute()
+      const latestStatuses = await fetchLatestStatuses(
+        db,
+        monitors.map((m) => m.id),
+      )
+
+      const summaries: Static<typeof StatusSummaryEntry>[] = []
+      for (const monitor of monitors) {
+        const buckets =
+          window === '24h'
+            ? await fetchHourlyHistory(db, monitor.id)
+            : (await fetchDailyHistory(db, monitor.id, WINDOW_DAYS[window])).slice(
+                -WINDOW_DAYS[window],
+              )
+        const stats = summarizeBuckets(buckets)
+        summaries.push({
+          monitorId: monitor.id,
+          status: stats.worstStatus ?? latestStatuses.get(monitor.id)?.status ?? null,
+          uptimePercent: stats.uptimePercent,
+          responseTimeMs: stats.latestResponseTimeMs,
+        })
+      }
+      return summaries
+    },
+  )
+
+  const CheckResultEntry = Type.Object({
+    checkedAt: Type.String(),
+    status: Type.Union([Type.Literal('up'), Type.Literal('degraded'), Type.Literal('down')]),
+    responseTimeMs: Type.Union([Type.Number(), Type.Null()]),
+    errorMessage: Type.Union([Type.String(), Type.Null()]),
+  })
+
+  const ChartPaths = Type.Object({ lineD: Type.String(), areaD: Type.String() })
+
+  const CheckResultsResponse = Type.Object({
+    chart: ChartPaths,
+    recentChecks: Type.Array(CheckResultEntry),
+  })
+
+  // Detail-screen data: the response-time chart (via the shared aggregation bucketing +
+  // sparkline-path math, at the dashboard's larger 640x120 size) and the last few raw check
+  // rows with error messages for the "recent checks" table. No bucketing on recentChecks —
+  // it reads check_results directly, since bucketing would collapse the errors we want to show.
+  app.get(
+    '/monitors/:id/check-results',
+    {
+      preHandler: [requireRole('viewer')],
+      schema: {
+        params: ParamsWithId,
+        querystring: WindowQuery,
+        response: { 200: CheckResultsResponse },
+      },
+    },
+    async (
+      request: FastifyRequest<{
+        Params: Static<typeof ParamsWithId>
+        Querystring: Static<typeof WindowQuery>
+      }>,
+      reply,
+    ) => {
+      const monitor = await db
+        .selectFrom('monitors')
+        .select('id')
+        .where('id', '=', request.params.id)
+        .executeTakeFirst()
+      if (!monitor) return sendNotFound(reply, `monitor ${request.params.id} not found`)
+
+      const window: Window = isWindow(request.query.window) ? request.query.window : '24h'
+      const buckets =
+        window === '24h'
+          ? await fetchHourlyHistory(db, request.params.id)
+          : (await fetchDailyHistory(db, request.params.id, WINDOW_DAYS[window])).slice(
+              -WINDOW_DAYS[window],
+            )
+      const stats = summarizeBuckets(buckets)
+      const chart = buildSparklinePaths(
+        stats.responseTimeSeries,
+        DETAIL_CHART_WIDTH,
+        DETAIL_CHART_HEIGHT,
+        DETAIL_CHART_PAD,
+      )
+
+      const rows = await db
+        .selectFrom('check_results')
+        .select(['checked_at', 'status', 'response_time_ms', 'error_message'])
+        .where('monitor_id', '=', request.params.id)
+        .orderBy('checked_at', 'desc')
+        .limit(RECENT_CHECKS_LIMIT)
+        .execute()
+
+      return {
+        chart,
+        recentChecks: rows.map((row) => ({
+          checkedAt: row.checked_at.toISOString(),
+          status: row.status,
+          responseTimeMs: row.response_time_ms,
+          errorMessage: row.error_message,
+        })),
+      }
     },
   )
 }

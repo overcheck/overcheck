@@ -4,6 +4,8 @@ import type { Kysely } from 'kysely'
 import type { Database } from './db/client.js'
 import { sendForbidden, sendUnauthorized } from './routes/http-errors.js'
 
+export const SESSION_COOKIE_NAME = 'session'
+
 export type UserRole = 'admin' | 'editor' | 'viewer'
 
 export interface AuthUser {
@@ -51,26 +53,109 @@ function extractBearerToken(header: string | undefined): string | undefined {
   return header.slice('Bearer '.length).trim() || undefined
 }
 
+/** Parses a single cookie value out of a raw `Cookie` header. Hand-rolled rather than
+ * pulling in `@fastify/cookie` — this app only ever needs to read/write one cookie. */
+export function parseCookie(header: string | undefined, name: string): string | undefined {
+  if (!header) return undefined
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=')
+    if (eq === -1) continue
+    if (part.slice(0, eq).trim() !== name) continue
+    const value = part.slice(eq + 1).trim()
+    if (!value) return undefined
+    try {
+      return decodeURIComponent(value)
+    } catch {
+      return value
+    }
+  }
+  return undefined
+}
+
+/** Sets the browser session cookie. `secure` should be true in production (HTTPS) and can
+ * be disabled for plain-http local development — see `registerLoginHtmlRoute`'s caller. */
+export function setSessionCookie(
+  reply: FastifyReply,
+  token: string,
+  ttlHours: number,
+  secure: boolean,
+): void {
+  const maxAgeSeconds = Math.round(ttlHours * 60 * 60)
+  const attrs = [
+    `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
+    'HttpOnly',
+    'SameSite=Lax',
+    'Path=/',
+    `Max-Age=${maxAgeSeconds}`,
+  ]
+  if (secure) attrs.push('Secure')
+  reply.header('set-cookie', attrs.join('; '))
+}
+
+export function clearSessionCookie(reply: FastifyReply, secure: boolean): void {
+  const attrs = [`${SESSION_COOKIE_NAME}=`, 'HttpOnly', 'SameSite=Lax', 'Path=/', 'Max-Age=0']
+  if (secure) attrs.push('Secure')
+  reply.header('set-cookie', attrs.join('; '))
+}
+
+/** Extracts the session token from either the Bearer header (CLI/API clients) or the
+ * browser session cookie (dashboard), and resolves it to the authenticated user. Shared by
+ * `registerSessionAuth` (JSON API — replies 401 on failure) and `registerDashboardAuth`
+ * (browser HTML routes — redirects to /login on failure) so both stay in sync. */
+export function extractSessionToken(request: FastifyRequest): string | undefined {
+  return (
+    extractBearerToken(request.headers.authorization) ??
+    parseCookie(request.headers.cookie, SESSION_COOKIE_NAME)
+  )
+}
+
+export async function resolveSessionUser(
+  db: Kysely<Database>,
+  token: string,
+): Promise<AuthUser | null> {
+  const session = await db
+    .selectFrom('sessions')
+    .innerJoin('users', 'users.id', 'sessions.user_id')
+    .select(['users.id', 'users.email', 'users.role', 'sessions.expires_at'])
+    .where('sessions.token_hash', '=', hashToken(token))
+    .executeTakeFirst()
+
+  if (!session || session.expires_at.getTime() <= Date.now()) return null
+  return { id: session.id, email: session.email, role: session.role }
+}
+
 export async function registerSessionAuth(
   app: FastifyInstance,
   db: Kysely<Database>,
 ): Promise<void> {
   app.addHook('onRequest', async (request, reply: FastifyReply) => {
-    const token = extractBearerToken(request.headers.authorization)
+    const token = extractSessionToken(request)
     if (!token) return sendUnauthorized(reply, 'Authorization bearer token required')
 
-    const session = await db
-      .selectFrom('sessions')
-      .innerJoin('users', 'users.id', 'sessions.user_id')
-      .select(['users.id', 'users.email', 'users.role', 'sessions.expires_at'])
-      .where('sessions.token_hash', '=', hashToken(token))
-      .executeTakeFirst()
+    const user = await resolveSessionUser(db, token)
+    if (!user) return sendUnauthorized(reply, 'Invalid or expired session')
 
-    if (!session || session.expires_at.getTime() <= Date.now()) {
-      return sendUnauthorized(reply, 'Invalid or expired session')
+    request.user = user
+  })
+}
+
+/**
+ * Same session resolution as `registerSessionAuth`, but for browser-facing dashboard HTML
+ * routes: on missing/invalid session it redirects to `/login?next=<original path>` instead
+ * of replying with a JSON 401, since there's no API client here to parse that body.
+ */
+export async function registerDashboardAuth(
+  app: FastifyInstance,
+  db: Kysely<Database>,
+): Promise<void> {
+  app.addHook('onRequest', async (request, reply: FastifyReply) => {
+    const token = extractSessionToken(request)
+    const user = token ? await resolveSessionUser(db, token) : null
+    if (!user) {
+      const next = encodeURIComponent(request.url)
+      return reply.redirect(`/login?next=${next}`)
     }
-
-    request.user = { id: session.id, email: session.email, role: session.role }
+    request.user = user
   })
 }
 
