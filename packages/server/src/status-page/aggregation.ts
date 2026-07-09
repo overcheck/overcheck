@@ -171,11 +171,17 @@ const SPARK_WIDTH = 220
 const SPARK_HEIGHT = 48
 const SPARK_PAD = 4
 
-/** Builds the inline SVG line + area path for the response-time sparkline, matching the
- * design's 220x48 viewBox with 4px padding, min/max-scaled y. No-data points are dropped
- * from the series entirely (rather than fabricated) since the design never had gaps to
- * account for. */
-export function buildSparklinePaths(series: (number | null)[]): SparklinePaths {
+/** Builds the inline SVG line + area path for a response-time chart at the given viewBox
+ * size, min/max-scaled y. No-data points are dropped from the series entirely (rather than
+ * fabricated) since neither surface's design has gaps to account for. Defaults match the
+ * status page's 220x48 sparkline; the dashboard's monitor-detail chart calls this with its
+ * own 640x120 dimensions instead of duplicating the path math. */
+export function buildSparklinePaths(
+  series: (number | null)[],
+  width = SPARK_WIDTH,
+  height = SPARK_HEIGHT,
+  pad = SPARK_PAD,
+): SparklinePaths {
   const values = series.filter((v): v is number => v !== null)
   if (values.length === 0) return { lineD: '', areaD: '' }
 
@@ -183,16 +189,16 @@ export function buildSparklinePaths(series: (number | null)[]): SparklinePaths {
   let max = Math.max(...values)
   if (max === min) max = min + 1
 
-  const step = (SPARK_WIDTH - 2 * SPARK_PAD) / (values.length - 1 || 1)
+  const step = (width - 2 * pad) / (values.length - 1 || 1)
   const points = values.map((v, i) => ({
-    x: SPARK_PAD + i * step,
-    y: SPARK_HEIGHT - SPARK_PAD - ((v - min) / (max - min)) * (SPARK_HEIGHT - 2 * SPARK_PAD),
+    x: pad + i * step,
+    y: height - pad - ((v - min) / (max - min)) * (height - 2 * pad),
   }))
 
   const lineD = 'M' + points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' L')
   const last = points[points.length - 1]
   const first = points[0]
-  const areaD = `${lineD} L${last.x.toFixed(1)},${SPARK_HEIGHT - SPARK_PAD} L${first.x.toFixed(1)},${SPARK_HEIGHT - SPARK_PAD} Z`
+  const areaD = `${lineD} L${last.x.toFixed(1)},${height - pad} L${first.x.toFixed(1)},${height - pad} Z`
 
   return { lineD, areaD }
 }

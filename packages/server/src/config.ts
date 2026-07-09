@@ -8,6 +8,7 @@ export interface Config {
   sessionTtlHours: number
   smtp: SmtpConfig | undefined
   alertTimeoutMs: number
+  secureCookies: boolean
 }
 
 function loadSmtpConfig(env: NodeJS.ProcessEnv): SmtpConfig | undefined {
@@ -39,5 +40,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     sessionTtlHours: Number(env.SESSION_TTL_HOURS ?? 168),
     smtp: loadSmtpConfig(env),
     alertTimeoutMs: Number(env.ALERT_TIMEOUT_MS ?? 5000),
+    // The session cookie's `Secure` attribute defaults on in production (HTTPS-only) and can
+    // be disabled explicitly for local development over plain http, where a Secure cookie
+    // would never be sent back by the browser.
+    secureCookies: env.SECURE_COOKIES ? env.SECURE_COOKIES === 'true' : env.NODE_ENV === 'production',
   }
 }
