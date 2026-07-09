@@ -5,19 +5,33 @@ import { requireRole } from '../auth.js'
 import type { Database } from '../db/client.js'
 import { sendConflict, sendNotFound } from './http-errors.js'
 
+const StatusPageMonitorEntry = Type.Object({
+  monitorId: Type.Integer(),
+  groupName: Type.Optional(Type.String()),
+})
+
 const StatusPageBody = Type.Object({
   name: Type.String({ minLength: 1 }),
   slug: Type.String({ minLength: 1, pattern: '^[a-z0-9-]+$' }),
-  monitorIds: Type.Optional(Type.Array(Type.Integer())),
+  logoUrl: Type.Optional(Type.String()),
+  accentColor: Type.Optional(Type.String()),
+  monitors: Type.Optional(Type.Array(StatusPageMonitorEntry)),
 })
 
 const StatusPageUpdateBody = Type.Partial(StatusPageBody)
+
+const StatusPageMonitorResponse = Type.Object({
+  monitorId: Type.Number(),
+  groupName: Type.Union([Type.String(), Type.Null()]),
+})
 
 const StatusPageResponse = Type.Object({
   id: Type.Number(),
   name: Type.String(),
   slug: Type.String(),
-  monitorIds: Type.Array(Type.Number()),
+  logoUrl: Type.Union([Type.String(), Type.Null()]),
+  accentColor: Type.String(),
+  monitors: Type.Array(StatusPageMonitorResponse),
   createdAt: Type.String(),
   updatedAt: Type.String(),
 })
@@ -26,36 +40,41 @@ const ParamsWithId = Type.Object({ id: Type.Integer() })
 
 type StatusPageBodyT = Static<typeof StatusPageBody>
 type StatusPageUpdateBodyT = Static<typeof StatusPageUpdateBody>
+type StatusPageMonitorEntryT = Static<typeof StatusPageMonitorEntry>
 
 const UNIQUE_VIOLATION = '23505'
 
-async function fetchMonitorIds(db: Kysely<Database>, statusPageId: number): Promise<number[]> {
+async function fetchMonitors(
+  db: Kysely<Database>,
+  statusPageId: number,
+): Promise<Static<typeof StatusPageMonitorResponse>[]> {
   const rows = await db
     .selectFrom('status_page_monitors')
-    .select('monitor_id')
+    .select(['monitor_id', 'group_name'])
     .where('status_page_id', '=', statusPageId)
     .orderBy('sort_order')
     .execute()
-  return rows.map((r) => r.monitor_id)
+  return rows.map((r) => ({ monitorId: r.monitor_id, groupName: r.group_name }))
 }
 
 async function replaceMonitorAssociations(
   db: Kysely<Database>,
   statusPageId: number,
-  monitorIds: number[],
+  monitors: StatusPageMonitorEntryT[],
 ): Promise<void> {
   await db.transaction().execute(async (trx) => {
     await trx
       .deleteFrom('status_page_monitors')
       .where('status_page_id', '=', statusPageId)
       .execute()
-    if (monitorIds.length > 0) {
+    if (monitors.length > 0) {
       await trx
         .insertInto('status_page_monitors')
         .values(
-          monitorIds.map((monitorId, index) => ({
+          monitors.map((m, index) => ({
             status_page_id: statusPageId,
-            monitor_id: monitorId,
+            monitor_id: m.monitorId,
+            group_name: m.groupName ?? null,
             sort_order: index,
           })),
         )
@@ -78,7 +97,9 @@ export function registerStatusPageRoutes(app: FastifyInstance, db: Kysely<Databa
           id: row.id,
           name: row.name,
           slug: row.slug,
-          monitorIds: await fetchMonitorIds(db, row.id),
+          logoUrl: row.logo_url,
+          accentColor: row.accent_color,
+          monitors: await fetchMonitors(db, row.id),
           createdAt: row.created_at.toISOString(),
           updatedAt: row.updated_at.toISOString(),
         })),
@@ -103,7 +124,9 @@ export function registerStatusPageRoutes(app: FastifyInstance, db: Kysely<Databa
         id: row.id,
         name: row.name,
         slug: row.slug,
-        monitorIds: await fetchMonitorIds(db, row.id),
+        logoUrl: row.logo_url,
+        accentColor: row.accent_color,
+        monitors: await fetchMonitors(db, row.id),
         createdAt: row.created_at.toISOString(),
         updatedAt: row.updated_at.toISOString(),
       }
@@ -122,7 +145,12 @@ export function registerStatusPageRoutes(app: FastifyInstance, db: Kysely<Databa
       try {
         row = await db
           .insertInto('status_pages')
-          .values({ name: body.name, slug: body.slug })
+          .values({
+            name: body.name,
+            slug: body.slug,
+            ...(body.logoUrl !== undefined && { logo_url: body.logoUrl }),
+            ...(body.accentColor !== undefined && { accent_color: body.accentColor }),
+          })
           .returningAll()
           .executeTakeFirstOrThrow()
       } catch (err) {
@@ -132,8 +160,8 @@ export function registerStatusPageRoutes(app: FastifyInstance, db: Kysely<Databa
         throw err
       }
 
-      if (body.monitorIds?.length) {
-        await replaceMonitorAssociations(db, row.id, body.monitorIds)
+      if (body.monitors?.length) {
+        await replaceMonitorAssociations(db, row.id, body.monitors)
       }
 
       reply.code(201)
@@ -141,7 +169,9 @@ export function registerStatusPageRoutes(app: FastifyInstance, db: Kysely<Databa
         id: row.id,
         name: row.name,
         slug: row.slug,
-        monitorIds: body.monitorIds ?? [],
+        logoUrl: row.logo_url,
+        accentColor: row.accent_color,
+        monitors: await fetchMonitors(db, row.id),
         createdAt: row.created_at.toISOString(),
         updatedAt: row.updated_at.toISOString(),
       }
@@ -173,6 +203,8 @@ export function registerStatusPageRoutes(app: FastifyInstance, db: Kysely<Databa
           .set({
             ...(body.name !== undefined && { name: body.name }),
             ...(body.slug !== undefined && { slug: body.slug }),
+            ...(body.logoUrl !== undefined && { logo_url: body.logoUrl }),
+            ...(body.accentColor !== undefined && { accent_color: body.accentColor }),
             updated_at: new Date().toISOString(),
           })
           .where('id', '=', request.params.id)
@@ -186,15 +218,17 @@ export function registerStatusPageRoutes(app: FastifyInstance, db: Kysely<Databa
       }
       if (!row) return sendNotFound(reply, `status page ${request.params.id} not found`)
 
-      if (body.monitorIds !== undefined) {
-        await replaceMonitorAssociations(db, row.id, body.monitorIds)
+      if (body.monitors !== undefined) {
+        await replaceMonitorAssociations(db, row.id, body.monitors)
       }
 
       return {
         id: row.id,
         name: row.name,
         slug: row.slug,
-        monitorIds: await fetchMonitorIds(db, row.id),
+        logoUrl: row.logo_url,
+        accentColor: row.accent_color,
+        monitors: await fetchMonitors(db, row.id),
         createdAt: row.created_at.toISOString(),
         updatedAt: row.updated_at.toISOString(),
       }
