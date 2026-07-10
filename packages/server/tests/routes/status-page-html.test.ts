@@ -65,7 +65,10 @@ describe('status page HTML route', () => {
     expect(validWindow.statusCode).toBe(200)
     expect(validWindow.body).toContain('Uptime (30d)')
 
-    const invalidWindow = await testApp.inject({ method: 'GET', url: `/status/${slug}?window=bogus` })
+    const invalidWindow = await testApp.inject({
+      method: 'GET',
+      url: `/status/${slug}?window=bogus`,
+    })
     expect(invalidWindow.statusCode).toBe(200)
     expect(invalidWindow.body).toContain('Uptime (7d)')
   })

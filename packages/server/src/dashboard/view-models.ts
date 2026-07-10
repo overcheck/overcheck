@@ -328,7 +328,10 @@ export async function buildAlertChannelsListViewModel(
   user: AuthUser,
   flash?: string,
 ): Promise<AlertChannelsListViewModel> {
-  const [channelsRes, monitorsRes] = await Promise.all([api.listAlertChannels(), api.listMonitors()])
+  const [channelsRes, monitorsRes] = await Promise.all([
+    api.listAlertChannels(),
+    api.listMonitors(),
+  ])
   const monitors = monitorsRes.data
   const monitorChannels = await Promise.all(monitors.map((m) => api.getMonitorAlertChannels(m.id)))
 

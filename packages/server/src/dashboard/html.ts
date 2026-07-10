@@ -32,7 +32,11 @@ export function escapeHtml(text: string): string {
   })
 }
 
-function markerStyle(shape: 'circle' | 'diamond' | 'square' | 'none', color: string, size: number): string {
+function markerStyle(
+  shape: 'circle' | 'diamond' | 'square' | 'none',
+  color: string,
+  size: number,
+): string {
   const base = `width:${size}px;height:${size}px;flex:none;background:${color}`
   if (shape === 'diamond') return `${base};border-radius:20%;transform:rotate(45deg)`
   if (shape === 'square') return `${base};border-radius:3px`
@@ -165,7 +169,12 @@ function renderSidebar(sidebar: SidebarViewModel): string {
     </div>`
 }
 
-function renderLayout(title: string, sidebar: SidebarViewModel, body: string, flash?: string): string {
+function renderLayout(
+  title: string,
+  sidebar: SidebarViewModel,
+  body: string,
+  flash?: string,
+): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>${headTags(title)}</head>
@@ -184,7 +193,9 @@ function renderLayout(title: string, sidebar: SidebarViewModel, body: string, fl
 function qs(params: Record<string, string | undefined>): string {
   const entries = Object.entries(params).filter((e): e is [string, string] => !!e[1])
   if (entries.length === 0) return ''
-  return '?' + entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
+  return (
+    '?' + entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
+  )
 }
 
 function sortHeader(
@@ -205,7 +216,10 @@ function sortHeader(
   return `<th><a href="/dashboard/monitors${href}">${escapeHtml(label)}${arrow}</a></th>`
 }
 
-function filterPillsHref(vm: MonitorsListViewModel, overrides: Partial<{ status: string; type: string }>): string {
+function filterPillsHref(
+  vm: MonitorsListViewModel,
+  overrides: Partial<{ status: string; type: string }>,
+): string {
   const status = overrides.status ?? (vm.statusFilter === 'all' ? undefined : vm.statusFilter)
   const type = overrides.type ?? (vm.typeFilter === 'all' ? undefined : vm.typeFilter)
   return qs({
@@ -234,7 +248,9 @@ export function renderMonitorsListPage(vm: MonitorsListViewModel): string {
   const statusPills = STATUS_FILTERS.map((s: StatusFilter) => {
     const active = vm.statusFilter === s
     const label = s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)
-    const href = active ? filterPillsHref(vm, { status: undefined }) : filterPillsHref(vm, { status: s })
+    const href = active
+      ? filterPillsHref(vm, { status: undefined })
+      : filterPillsHref(vm, { status: s })
     return `<a class="pill ${active ? 'active' : ''}" href="/dashboard/monitors${href}">${escapeHtml(label)}</a>`
   }).join('')
 
@@ -242,7 +258,9 @@ export function renderMonitorsListPage(vm: MonitorsListViewModel): string {
     .map((t) => {
       const active = vm.typeFilter === t
       const label = t === 'all' ? 'All types' : t
-      const href = active ? filterPillsHref(vm, { type: undefined }) : filterPillsHref(vm, { type: t })
+      const href = active
+        ? filterPillsHref(vm, { type: undefined })
+        : filterPillsHref(vm, { type: t })
       return `<a class="pill ${active ? 'active' : ''}" href="/dashboard/monitors${href}">${escapeHtml(label)}</a>`
     })
     .join('')
@@ -362,7 +380,10 @@ export function renderMonitorDetailPage(vm: MonitorDetailViewModel): string {
   return renderLayout(vm.name, vm.sidebar, body)
 }
 
-const TYPE_META: Record<string, { showUrl: boolean; showHostPort: boolean; showPort: boolean; showKeyword: boolean }> = {
+const TYPE_META: Record<
+  string,
+  { showUrl: boolean; showHostPort: boolean; showPort: boolean; showKeyword: boolean }
+> = {
   http: { showUrl: true, showHostPort: false, showPort: false, showKeyword: false },
   keyword: { showUrl: true, showHostPort: false, showPort: false, showKeyword: true },
   tcp: { showUrl: false, showHostPort: true, showPort: true, showKeyword: false },
