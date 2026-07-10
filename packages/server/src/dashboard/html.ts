@@ -163,7 +163,7 @@ function renderSidebar(sidebar: SidebarViewModel): string {
           </div>
         </div>
         <form class="logout-form" method="POST" action="/logout">
-          <button type="submit" class="logout-btn">Sign out</button>
+          <button type="submit" id="sign-out" class="logout-btn">Sign out</button>
         </form>
       </div>
     </div>`
@@ -508,7 +508,7 @@ export function renderMonitorFormPage(vm: MonitorFormViewModel): string {
           <div class="toggle-pills">${channelToggles}</div>
         </div>
         <div class="actions-row">
-          <button type="submit" class="btn-primary" style="border:none">Save monitor</button>
+          <button type="submit" id="save-monitor" class="btn-primary" style="border:none">Save monitor</button>
           <a class="btn-neutral" href="${vm.backUrl}">Cancel</a>
         </div>
       </form>
@@ -581,7 +581,7 @@ export function renderAlertChannelFormPage(vm: AlertChannelFormViewModel): strin
           ${vm.errors.target ? `<div class="field-error">${escapeHtml(vm.errors.target)}</div>` : ''}
         </div>
         <div class="actions-row">
-          <button type="submit" class="btn-primary" style="border:none">Save channel</button>
+          <button type="submit" id="save-channel" class="btn-primary" style="border:none">Save channel</button>
           <a class="btn-neutral" href="${vm.backUrl}">Cancel</a>
         </div>
       </form>
