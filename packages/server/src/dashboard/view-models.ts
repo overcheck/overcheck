@@ -62,6 +62,7 @@ export interface MonitorsListViewModel {
   countLabel: string
   rows: MonitorRowViewModel[]
   noResults: boolean
+  isFreshWorkspace: boolean
 }
 
 export interface MonitorsListQuery {
@@ -161,6 +162,7 @@ export async function buildMonitorsListViewModel(
     countLabel: `${rows.length} of ${monitors.length}`,
     rows,
     noResults: rows.length === 0,
+    isFreshWorkspace: monitors.length === 0,
   }
 }
 

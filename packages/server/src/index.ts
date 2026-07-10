@@ -40,7 +40,15 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => void shutdown())
   process.on('SIGINT', () => void shutdown())
 
-  await app.listen({ port: config.port, host: '0.0.0.0' })
+  try {
+    await app.listen({ port: config.port, host: '0.0.0.0' })
+  } catch (err) {
+    if (err instanceof Error && 'code' in err && err.code === 'EADDRINUSE') {
+      console.error(`Port ${config.port} is already in use — set PORT to use a different one.`)
+      process.exit(1)
+    }
+    throw err
+  }
 }
 
 main().catch((err) => {

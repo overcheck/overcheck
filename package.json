@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "npm run dev -w packages/server",
     "test": "npm run test -w packages/server",
+    "typecheck": "npm run typecheck -w packages/server && npm run typecheck -w packages/cli",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

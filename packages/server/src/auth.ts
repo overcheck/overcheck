@@ -159,6 +159,27 @@ export async function registerDashboardAuth(
   })
 }
 
+/**
+ * Creates the first admin user if (and only if) no users exist yet — returns null otherwise.
+ * Shared by the JSON `/api/auth/register` route and the browser `/login/setup` route so
+ * "registration is closed after the first admin" is enforced in exactly one place.
+ */
+export async function createFirstAdminUser(
+  db: Kysely<Database>,
+  email: string,
+  password: string,
+): Promise<AuthUser | null> {
+  const existingUser = await db.selectFrom('users').select('id').executeTakeFirst()
+  if (existingUser) return null
+
+  const user = await db
+    .insertInto('users')
+    .values({ email, password_hash: hashPassword(password), role: 'admin' })
+    .returningAll()
+    .executeTakeFirstOrThrow()
+  return { id: user.id, email: user.email, role: user.role }
+}
+
 export async function createSession(
   db: Kysely<Database>,
   userId: number,

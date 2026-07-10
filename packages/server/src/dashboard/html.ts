@@ -285,7 +285,13 @@ export function renderMonitorsListPage(vm: MonitorsListViewModel): string {
           ${vm.rows.map(renderMonitorRow).join('')}
         </tbody>
       </table>
-      ${vm.noResults ? '<div class="empty">No monitors match the current filters.</div>' : ''}
+      ${
+        vm.isFreshWorkspace
+          ? `<div class="empty">No monitors yet.${vm.newMonitorUrl ? ` <a href="${vm.newMonitorUrl}">Create your first monitor</a>.` : ''}</div>`
+          : vm.noResults
+            ? '<div class="empty">No monitors match the current filters.</div>'
+            : ''
+      }
     </div>`
 
   return renderLayout('Monitors', vm.sidebar, body)
