@@ -352,7 +352,10 @@ describe('dashboard alert channels', () => {
   it('sending a test alert redirects back to the list with a flash message', async () => {
     const editor = await createTestUser('editor')
     const cookie = await loginCookie(editor)
-    const channel = await createChannel({ type: 'webhook', config: { url: 'https://example.invalid/hook' } })
+    const channel = await createChannel({
+      type: 'webhook',
+      config: { url: 'https://example.invalid/hook' },
+    })
 
     const response = await testApp.inject({
       method: 'POST',

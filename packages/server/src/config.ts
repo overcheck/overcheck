@@ -43,6 +43,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     // The session cookie's `Secure` attribute defaults on in production (HTTPS-only) and can
     // be disabled explicitly for local development over plain http, where a Secure cookie
     // would never be sent back by the browser.
-    secureCookies: env.SECURE_COOKIES ? env.SECURE_COOKIES === 'true' : env.NODE_ENV === 'production',
+    secureCookies: env.SECURE_COOKIES
+      ? env.SECURE_COOKIES === 'true'
+      : env.NODE_ENV === 'production',
   }
 }
