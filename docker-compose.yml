@@ -17,13 +17,15 @@ services:
       retries: 5
 
   app:
-    build:
-      context: .
-      dockerfile: packages/server/Dockerfile
+    image: ghcr.io/overcheck/overcheck:${OVERCHECK_VERSION:-latest}
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-overcheck}:${POSTGRES_PASSWORD:-overcheck}@postgres:5432/${POSTGRES_DB:-overcheck}
       PORT: 3000
+      # The quickstart serves plain HTTP with no TLS in front. A `Secure` session cookie would
+      # never be sent back by the browser in that case, breaking login with no visible error.
+      # Set this back to true (or unset it) once you put a TLS-terminating proxy in front.
+      SECURE_COOKIES: ${SECURE_COOKIES:-false}
     ports:
       - '3000:3000'
     depends_on:

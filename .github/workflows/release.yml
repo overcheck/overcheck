@@ -1,0 +1,71 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  NODE_VERSION: '24'
+  IMAGE_NAME: ghcr.io/overcheck/overcheck
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: overcheck
+          POSTGRES_PASSWORD: overcheck
+          POSTGRES_DB: overcheck
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U overcheck -d overcheck"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      # Tags can be pushed independent of a green main, so gate the release on the same
+      # checks as ci.yml rather than trusting an earlier run.
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test -w packages/server
+      - run: npm run test -w packages/cli
+      - run: npm run build -w packages/server
+      - run: npm run build -w packages/cli
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/server/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+            ${{ env.IMAGE_NAME }}:latest
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true

@@ -40,6 +40,7 @@ export async function buildApp(
   await app.register(swaggerUi, { routePrefix: '/api/docs' })
 
   registerHealthRoute(app, db)
+  app.get('/', async (_request, reply) => reply.redirect('/dashboard'))
   registerStatusPageHtmlRoute(app, db, checkRetentionDays)
   registerLoginHtmlRoute(app, db, sessionTtlHours, secureCookies)
 
