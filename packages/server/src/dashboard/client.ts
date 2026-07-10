@@ -97,7 +97,11 @@ export function dashboardApi(app: FastifyInstance, token: string) {
       payload: payload as Record<string, unknown> | undefined,
     })
     const data = response.body ? (JSON.parse(response.body) as T) : (undefined as T)
-    return { ok: response.statusCode >= 200 && response.statusCode < 300, status: response.statusCode, data }
+    return {
+      ok: response.statusCode >= 200 && response.statusCode < 300,
+      status: response.statusCode,
+      data,
+    }
   }
 
   return {

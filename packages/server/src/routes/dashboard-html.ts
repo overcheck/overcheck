@@ -39,7 +39,10 @@ function notFoundPage(): string {
 
 function monitorFormValuesFromQuery(query: Record<string, unknown>): MonitorFormFieldValues | null {
   if (typeof query.type !== 'string') return null
-  const channels = typeof query.channels === 'string' && query.channels ? query.channels.split(',').map(Number) : []
+  const channels =
+    typeof query.channels === 'string' && query.channels
+      ? query.channels.split(',').map(Number)
+      : []
   return {
     name: typeof query.name === 'string' ? query.name : '',
     type: (['http', 'tcp', 'ping', 'keyword'] as const).includes(query.type as never)
@@ -71,13 +74,17 @@ function monitorFormValuesFromBody(body: FormBody): MonitorFormFieldValues {
     timeoutSeconds: formString(body, 'timeoutSeconds'),
     retries: formString(body, 'retries'),
     degradedAfterMs: formString(body, 'degradedAfterMs'),
-    alertChannelIds: formStringArray(body, 'alertChannelIds').map(Number).filter((n) => !Number.isNaN(n)),
+    alertChannelIds: formStringArray(body, 'alertChannelIds')
+      .map(Number)
+      .filter((n) => !Number.isNaN(n)),
   }
 }
 
-function validateMonitorFormValues(
-  values: MonitorFormFieldValues,
-): { name?: string; url?: string; host?: string } {
+function validateMonitorFormValues(values: MonitorFormFieldValues): {
+  name?: string
+  url?: string
+  host?: string
+} {
   const errors: { name?: string; url?: string; host?: string } = {}
   if (!values.name.trim()) errors.name = 'Name is required.'
   if ((values.type === 'http' || values.type === 'keyword') && !values.url.trim()) {
@@ -105,7 +112,9 @@ function monitorFormValuesToWriteBody(values: MonitorFormFieldValues): MonitorWr
   return body
 }
 
-function alertChannelFormValuesFromQuery(query: Record<string, unknown>): AlertChannelFormFieldValues | null {
+function alertChannelFormValuesFromQuery(
+  query: Record<string, unknown>,
+): AlertChannelFormFieldValues | null {
   if (typeof query.type !== 'string') return null
   return {
     name: typeof query.name === 'string' ? query.name : '',
@@ -147,7 +156,13 @@ export function registerDashboardHtmlRoutes(app: FastifyInstance): void {
     '/dashboard/monitors',
     async (
       request: FastifyRequest<{
-        Querystring: { search?: string; status?: string; type?: string; sort?: string; dir?: string }
+        Querystring: {
+          search?: string
+          status?: string
+          type?: string
+          sort?: string
+          dir?: string
+        }
       }>,
       reply,
     ) => {
@@ -159,7 +174,10 @@ export function registerDashboardHtmlRoutes(app: FastifyInstance): void {
 
   app.get(
     '/dashboard/monitors/:id',
-    async (request: FastifyRequest<{ Params: { id: string }; Querystring: { window?: string } }>, reply) => {
+    async (
+      request: FastifyRequest<{ Params: { id: string }; Querystring: { window?: string } }>,
+      reply,
+    ) => {
       const id = Number(request.params.id)
       const window: Window = isWindow(request.query.window) ? request.query.window : '24h'
       const vm = await buildMonitorDetailViewModel(apiFor(request), request.user, id, window)
@@ -179,7 +197,9 @@ export function registerDashboardHtmlRoutes(app: FastifyInstance): void {
     }
     const api = apiFor(request)
     const channelsRes = await api.listAlertChannels()
-    const values = monitorFormValuesFromQuery(request.query as Record<string, unknown>) ?? DEFAULT_MONITOR_FORM_VALUES
+    const values =
+      monitorFormValuesFromQuery(request.query as Record<string, unknown>) ??
+      DEFAULT_MONITOR_FORM_VALUES
     reply.type('text/html')
     return renderMonitorFormPage({
       sidebar: buildSidebarViewModel(request.user, 'monitors'),
@@ -194,76 +214,82 @@ export function registerDashboardHtmlRoutes(app: FastifyInstance): void {
     })
   })
 
-  app.post('/dashboard/monitors/new', async (request: FastifyRequest<{ Body: FormBody }>, reply) => {
-    if (!canWrite(request.user.role)) {
-      reply.code(404).type('text/html')
-      return notFoundPage()
-    }
-    const api = apiFor(request)
-    const values = monitorFormValuesFromBody(request.body)
-    const errors = validateMonitorFormValues(values)
-
-    if (Object.keys(errors).length === 0) {
-      const created = await api.createMonitor(monitorFormValuesToWriteBody(values))
-      if (created.ok) {
-        if (values.alertChannelIds.length > 0) {
-          await api.putMonitorAlertChannels(created.data.id, values.alertChannelIds)
-        }
-        return reply.redirect(`/dashboard/monitors/${created.data.id}`)
+  app.post(
+    '/dashboard/monitors/new',
+    async (request: FastifyRequest<{ Body: FormBody }>, reply) => {
+      if (!canWrite(request.user.role)) {
+        reply.code(404).type('text/html')
+        return notFoundPage()
       }
-      if (created.status === 409) errors.name = 'That name is already in use.'
-      else errors.name = errors.name ?? 'Could not save monitor — check the fields above.'
-    }
+      const api = apiFor(request)
+      const values = monitorFormValuesFromBody(request.body)
+      const errors = validateMonitorFormValues(values)
 
-    const channelsRes = await api.listAlertChannels()
-    reply.code(422).type('text/html')
-    return renderMonitorFormPage({
-      sidebar: buildSidebarViewModel(request.user, 'monitors'),
-      headerLabel: 'New monitor',
-      actionUrl: '/dashboard/monitors/new',
-      formGetUrl: '/dashboard/monitors/new',
-      isEdit: false,
-      values,
-      errors,
-      allChannels: channelsRes.data,
-      backUrl: '/dashboard/monitors',
-    })
-  })
+      if (Object.keys(errors).length === 0) {
+        const created = await api.createMonitor(monitorFormValuesToWriteBody(values))
+        if (created.ok) {
+          if (values.alertChannelIds.length > 0) {
+            await api.putMonitorAlertChannels(created.data.id, values.alertChannelIds)
+          }
+          return reply.redirect(`/dashboard/monitors/${created.data.id}`)
+        }
+        if (created.status === 409) errors.name = 'That name is already in use.'
+        else errors.name = errors.name ?? 'Could not save monitor — check the fields above.'
+      }
 
-  app.get('/dashboard/monitors/:id/edit', async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
-    if (!canWrite(request.user.role)) {
-      reply.code(404).type('text/html')
-      return notFoundPage()
-    }
-    const id = Number(request.params.id)
-    const api = apiFor(request)
-    const [monitorRes, channelsRes, monitorChannelsRes] = await Promise.all([
-      api.getMonitor(id),
-      api.listAlertChannels(),
-      api.getMonitorAlertChannels(id),
-    ])
-    if (!monitorRes.ok) {
-      reply.code(404).type('text/html')
-      return notFoundPage()
-    }
-    const queryValues = monitorFormValuesFromQuery(request.query as Record<string, unknown>)
-    const values = queryValues ?? {
-      ...monitorToFormValues(monitorRes.data),
-      alertChannelIds: monitorChannelsRes.data.alertChannelIds,
-    }
-    reply.type('text/html')
-    return renderMonitorFormPage({
-      sidebar: buildSidebarViewModel(request.user, 'monitors'),
-      headerLabel: 'Edit monitor',
-      actionUrl: `/dashboard/monitors/${id}/edit`,
-      formGetUrl: `/dashboard/monitors/${id}/edit`,
-      isEdit: true,
-      values,
-      errors: {},
-      allChannels: channelsRes.data,
-      backUrl: `/dashboard/monitors/${id}`,
-    })
-  })
+      const channelsRes = await api.listAlertChannels()
+      reply.code(422).type('text/html')
+      return renderMonitorFormPage({
+        sidebar: buildSidebarViewModel(request.user, 'monitors'),
+        headerLabel: 'New monitor',
+        actionUrl: '/dashboard/monitors/new',
+        formGetUrl: '/dashboard/monitors/new',
+        isEdit: false,
+        values,
+        errors,
+        allChannels: channelsRes.data,
+        backUrl: '/dashboard/monitors',
+      })
+    },
+  )
+
+  app.get(
+    '/dashboard/monitors/:id/edit',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
+      if (!canWrite(request.user.role)) {
+        reply.code(404).type('text/html')
+        return notFoundPage()
+      }
+      const id = Number(request.params.id)
+      const api = apiFor(request)
+      const [monitorRes, channelsRes, monitorChannelsRes] = await Promise.all([
+        api.getMonitor(id),
+        api.listAlertChannels(),
+        api.getMonitorAlertChannels(id),
+      ])
+      if (!monitorRes.ok) {
+        reply.code(404).type('text/html')
+        return notFoundPage()
+      }
+      const queryValues = monitorFormValuesFromQuery(request.query as Record<string, unknown>)
+      const values = queryValues ?? {
+        ...monitorToFormValues(monitorRes.data),
+        alertChannelIds: monitorChannelsRes.data.alertChannelIds,
+      }
+      reply.type('text/html')
+      return renderMonitorFormPage({
+        sidebar: buildSidebarViewModel(request.user, 'monitors'),
+        headerLabel: 'Edit monitor',
+        actionUrl: `/dashboard/monitors/${id}/edit`,
+        formGetUrl: `/dashboard/monitors/${id}/edit`,
+        isEdit: true,
+        values,
+        errors: {},
+        allChannels: channelsRes.data,
+        backUrl: `/dashboard/monitors/${id}`,
+      })
+    },
+  )
 
   app.post(
     '/dashboard/monitors/:id/edit',
@@ -303,25 +329,31 @@ export function registerDashboardHtmlRoutes(app: FastifyInstance): void {
     },
   )
 
-  app.post('/dashboard/monitors/:id/pause', async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
-    if (!canWrite(request.user.role)) {
-      reply.code(404).type('text/html')
-      return notFoundPage()
-    }
-    const id = Number(request.params.id)
-    await apiFor(request).updateMonitor(id, { enabled: false })
-    return reply.redirect(`/dashboard/monitors/${id}`)
-  })
+  app.post(
+    '/dashboard/monitors/:id/pause',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
+      if (!canWrite(request.user.role)) {
+        reply.code(404).type('text/html')
+        return notFoundPage()
+      }
+      const id = Number(request.params.id)
+      await apiFor(request).updateMonitor(id, { enabled: false })
+      return reply.redirect(`/dashboard/monitors/${id}`)
+    },
+  )
 
-  app.post('/dashboard/monitors/:id/resume', async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
-    if (!canWrite(request.user.role)) {
-      reply.code(404).type('text/html')
-      return notFoundPage()
-    }
-    const id = Number(request.params.id)
-    await apiFor(request).updateMonitor(id, { enabled: true })
-    return reply.redirect(`/dashboard/monitors/${id}`)
-  })
+  app.post(
+    '/dashboard/monitors/:id/resume',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
+      if (!canWrite(request.user.role)) {
+        reply.code(404).type('text/html')
+        return notFoundPage()
+      }
+      const id = Number(request.params.id)
+      await apiFor(request).updateMonitor(id, { enabled: true })
+      return reply.redirect(`/dashboard/monitors/${id}`)
+    },
+  )
 
   app.get(
     '/dashboard/monitors/:id/delete/confirm',
@@ -346,23 +378,33 @@ export function registerDashboardHtmlRoutes(app: FastifyInstance): void {
     },
   )
 
-  app.post('/dashboard/monitors/:id/delete', async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
-    if (!canWrite(request.user.role)) {
-      reply.code(404).type('text/html')
-      return notFoundPage()
-    }
-    const id = Number(request.params.id)
-    await apiFor(request).deleteMonitor(id)
-    return reply.redirect('/dashboard/monitors')
-  })
+  app.post(
+    '/dashboard/monitors/:id/delete',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
+      if (!canWrite(request.user.role)) {
+        reply.code(404).type('text/html')
+        return notFoundPage()
+      }
+      const id = Number(request.params.id)
+      await apiFor(request).deleteMonitor(id)
+      return reply.redirect('/dashboard/monitors')
+    },
+  )
 
   // ---- Alert channels ----
 
-  app.get('/dashboard/alert-channels', async (request: FastifyRequest<{ Querystring: { flash?: string } }>, reply) => {
-    const vm = await buildAlertChannelsListViewModel(apiFor(request), request.user, request.query.flash)
-    reply.type('text/html')
-    return renderAlertChannelsListPage(vm)
-  })
+  app.get(
+    '/dashboard/alert-channels',
+    async (request: FastifyRequest<{ Querystring: { flash?: string } }>, reply) => {
+      const vm = await buildAlertChannelsListViewModel(
+        apiFor(request),
+        request.user,
+        request.query.flash,
+      )
+      reply.type('text/html')
+      return renderAlertChannelsListPage(vm)
+    },
+  )
 
   app.get('/dashboard/alert-channels/new', async (request, reply) => {
     if (!canWrite(request.user.role)) {
@@ -370,7 +412,8 @@ export function registerDashboardHtmlRoutes(app: FastifyInstance): void {
       return notFoundPage()
     }
     const values =
-      alertChannelFormValuesFromQuery(request.query as Record<string, unknown>) ?? DEFAULT_ALERT_CHANNEL_FORM_VALUES
+      alertChannelFormValuesFromQuery(request.query as Record<string, unknown>) ??
+      DEFAULT_ALERT_CHANNEL_FORM_VALUES
     reply.type('text/html')
     return renderAlertChannelFormPage({
       sidebar: buildSidebarViewModel(request.user, 'alert-channels'),
@@ -386,40 +429,43 @@ export function registerDashboardHtmlRoutes(app: FastifyInstance): void {
     })
   })
 
-  app.post('/dashboard/alert-channels/new', async (request: FastifyRequest<{ Body: FormBody }>, reply) => {
-    if (!canWrite(request.user.role)) {
-      reply.code(404).type('text/html')
-      return notFoundPage()
-    }
-    const values = alertChannelFormValuesFromBody(request.body)
-    const errors: { name?: string; target?: string } = {}
-    if (!values.name.trim()) errors.name = 'Name is required.'
+  app.post(
+    '/dashboard/alert-channels/new',
+    async (request: FastifyRequest<{ Body: FormBody }>, reply) => {
+      if (!canWrite(request.user.role)) {
+        reply.code(404).type('text/html')
+        return notFoundPage()
+      }
+      const values = alertChannelFormValuesFromBody(request.body)
+      const errors: { name?: string; target?: string } = {}
+      if (!values.name.trim()) errors.name = 'Name is required.'
 
-    if (Object.keys(errors).length === 0) {
-      const created = await apiFor(request).createAlertChannel({
-        name: values.name.trim(),
-        type: values.type,
-        config: alertChannelFormValuesToConfig(values),
+      if (Object.keys(errors).length === 0) {
+        const created = await apiFor(request).createAlertChannel({
+          name: values.name.trim(),
+          type: values.type,
+          config: alertChannelFormValuesToConfig(values),
+        })
+        if (created.ok) return reply.redirect('/dashboard/alert-channels')
+        if (created.status === 409) errors.name = 'That name is already in use.'
+        else errors.name = 'Could not save channel — check the fields above.'
+      }
+
+      reply.code(422).type('text/html')
+      return renderAlertChannelFormPage({
+        sidebar: buildSidebarViewModel(request.user, 'alert-channels'),
+        headerLabel: 'New channel',
+        actionUrl: '/dashboard/alert-channels/new',
+        formGetUrl: '/dashboard/alert-channels/new',
+        isEdit: false,
+        values,
+        errors,
+        targetLabel: TARGET_FIELD_META[values.type].label,
+        targetPlaceholder: TARGET_FIELD_META[values.type].placeholder,
+        backUrl: '/dashboard/alert-channels',
       })
-      if (created.ok) return reply.redirect('/dashboard/alert-channels')
-      if (created.status === 409) errors.name = 'That name is already in use.'
-      else errors.name = 'Could not save channel — check the fields above.'
-    }
-
-    reply.code(422).type('text/html')
-    return renderAlertChannelFormPage({
-      sidebar: buildSidebarViewModel(request.user, 'alert-channels'),
-      headerLabel: 'New channel',
-      actionUrl: '/dashboard/alert-channels/new',
-      formGetUrl: '/dashboard/alert-channels/new',
-      isEdit: false,
-      values,
-      errors,
-      targetLabel: TARGET_FIELD_META[values.type].label,
-      targetPlaceholder: TARGET_FIELD_META[values.type].placeholder,
-      backUrl: '/dashboard/alert-channels',
-    })
-  })
+    },
+  )
 
   app.get(
     '/dashboard/alert-channels/:id/edit',

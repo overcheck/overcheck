@@ -134,17 +134,14 @@ export function registerLoginHtmlRoute(
   sessionTtlHours: number,
   secureCookies: boolean,
 ): void {
-  app.get(
-    '/login',
-    async (request: FastifyRequest<{ Querystring: { next?: string } }>, reply) => {
-      reply.type('text/html')
-      const existingUser = await db.selectFrom('users').select('id').executeTakeFirst()
-      if (!existingUser) {
-        return renderSetupPageHtml({})
-      }
-      return renderLoginPageHtml({ next: safeNext(request.query.next) })
-    },
-  )
+  app.get('/login', async (request: FastifyRequest<{ Querystring: { next?: string } }>, reply) => {
+    reply.type('text/html')
+    const existingUser = await db.selectFrom('users').select('id').executeTakeFirst()
+    if (!existingUser) {
+      return renderSetupPageHtml({})
+    }
+    return renderLoginPageHtml({ next: safeNext(request.query.next) })
+  })
 
   app.post(
     '/login/setup',
@@ -158,7 +155,10 @@ export function registerLoginHtmlRoute(
       const user = await createFirstAdminUser(db, request.body.email, request.body.password)
       if (!user) {
         reply.code(403).type('text/html')
-        return renderLoginPageHtml({ next: DEFAULT_NEXT, error: 'Setup already completed — please sign in.' })
+        return renderLoginPageHtml({
+          next: DEFAULT_NEXT,
+          error: 'Setup already completed — please sign in.',
+        })
       }
 
       const token = await createSession(db, user.id, sessionTtlHours)

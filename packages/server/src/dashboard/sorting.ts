@@ -40,7 +40,10 @@ function compareSecondary(
     case 'response':
       // Missing response time (e.g. a down monitor with no successful check) sorts as
       // "worst" (slowest) regardless of direction, mirroring the design's "timeout" display.
-      return (a.responseTimeMs ?? Number.POSITIVE_INFINITY) - (b.responseTimeMs ?? Number.POSITIVE_INFINITY)
+      return (
+        (a.responseTimeMs ?? Number.POSITIVE_INFINITY) -
+        (b.responseTimeMs ?? Number.POSITIVE_INFINITY)
+      )
   }
 }
 

@@ -68,7 +68,10 @@ describe('public status-pages API', () => {
     const slug = `public-no-auth-${Date.now()}`
     await createStatusPage(slug, [{ monitorId: monitor.id }])
 
-    const response = await testApp.inject({ method: 'GET', url: `/api/public/status-pages/${slug}` })
+    const response = await testApp.inject({
+      method: 'GET',
+      url: `/api/public/status-pages/${slug}`,
+    })
     expect(response.statusCode).toBe(200)
   })
 
@@ -133,7 +136,11 @@ describe('public status-pages API', () => {
       method: 'POST',
       url: `/api/status-pages/${pageId}/incidents`,
       headers: authHeader,
-      payload: { title: 'Elevated latency', status: 'investigating', affectedMonitorIds: [monitor.id] },
+      payload: {
+        title: 'Elevated latency',
+        status: 'investigating',
+        affectedMonitorIds: [monitor.id],
+      },
     })
     const incidentId = incidentResponse.json().id
 
