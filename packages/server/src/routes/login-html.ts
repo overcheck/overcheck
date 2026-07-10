@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { Kysely } from 'kysely'
 import {
   clearSessionCookie,
+  createFirstAdminUser,
   createSession,
   extractSessionToken,
   hashToken,
@@ -65,12 +66,62 @@ function renderLoginPageHtml(opts: { next: string; error?: string }): string {
 </html>`
 }
 
+function renderSetupPageHtml(opts: { error?: string }): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Set up Overcheck</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:oklch(0.16 0.006 250); font-family:'IBM Plex Sans', system-ui, sans-serif; color:oklch(0.9 0.005 250); }
+  .card { width:360px; max-width:calc(100vw - 32px); background:oklch(0.19 0.006 250);
+    border:1px solid oklch(0.27 0.006 250); border-radius:8px; padding:28px 26px; box-sizing:border-box; }
+  .brand { display:flex; align-items:center; gap:8px; margin-bottom:14px; }
+  .brand-mark { width:20px; height:20px; border-radius:5px; background:oklch(0.55 0.16 250); flex:none; }
+  .brand-name { font-weight:600; font-size:14px; }
+  .intro { font-size:12.5px; color:oklch(0.65 0.01 250); margin:0 0 20px; line-height:1.5; }
+  label { display:block; font-size:11.5px; font-weight:600; color:oklch(0.65 0.01 250); margin-bottom:6px; }
+  input { width:100%; background:oklch(0.2 0.006 250); border:1px solid oklch(0.3 0.006 250);
+    color:oklch(0.9 0.005 250); font:13px 'IBM Plex Sans', sans-serif; padding:8px 10px; border-radius:6px;
+    outline:none; box-sizing:border-box; margin-bottom:16px; }
+  button { width:100%; background:oklch(0.55 0.16 250); border:none; color:#fff; font:600 12.5px 'IBM Plex Sans', sans-serif;
+    padding:9px 14px; border-radius:6px; cursor:pointer; }
+  .error { font-size:11.5px; color:oklch(0.62 0.18 25); margin:-8px 0 16px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand"><div class="brand-mark"></div><div class="brand-name">Overcheck</div></div>
+    <p class="intro">This is a new Overcheck instance — create the admin account to get started.</p>
+    <form method="POST" action="/login/setup">
+      ${opts.error ? `<div class="error">${escapeHtml(opts.error)}</div>` : ''}
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" required autofocus />
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" minlength="8" required />
+      <button type="submit">Create admin account</button>
+    </form>
+  </div>
+</body>
+</html>`
+}
+
 const LoginFormBody = Type.Object({
   email: Type.String(),
   password: Type.String(),
   next: Type.Optional(Type.String()),
 })
 type LoginFormBodyT = Static<typeof LoginFormBody>
+
+const SetupFormBody = Type.Object({
+  email: Type.String(),
+  password: Type.String(),
+})
+type SetupFormBodyT = Static<typeof SetupFormBody>
 
 /**
  * Browser-facing login/logout, distinct from the JSON `/api/auth/login` used by the CLI.
@@ -87,7 +138,32 @@ export function registerLoginHtmlRoute(
     '/login',
     async (request: FastifyRequest<{ Querystring: { next?: string } }>, reply) => {
       reply.type('text/html')
+      const existingUser = await db.selectFrom('users').select('id').executeTakeFirst()
+      if (!existingUser) {
+        return renderSetupPageHtml({})
+      }
       return renderLoginPageHtml({ next: safeNext(request.query.next) })
+    },
+  )
+
+  app.post(
+    '/login/setup',
+    { schema: { body: SetupFormBody } },
+    async (request: FastifyRequest<{ Body: SetupFormBodyT }>, reply) => {
+      if (request.body.password.length < 8) {
+        reply.code(400).type('text/html')
+        return renderSetupPageHtml({ error: 'Password must be at least 8 characters.' })
+      }
+
+      const user = await createFirstAdminUser(db, request.body.email, request.body.password)
+      if (!user) {
+        reply.code(403).type('text/html')
+        return renderLoginPageHtml({ next: DEFAULT_NEXT, error: 'Setup already completed — please sign in.' })
+      }
+
+      const token = await createSession(db, user.id, sessionTtlHours)
+      setSessionCookie(reply, token, sessionTtlHours, secureCookies)
+      return reply.redirect(DEFAULT_NEXT)
     },
   )
 

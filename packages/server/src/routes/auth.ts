@@ -1,7 +1,7 @@
 import { Type, type Static } from '@sinclair/typebox'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { Kysely } from 'kysely'
-import { createSession, hashPassword, hashToken, verifyPassword } from '../auth.js'
+import { createFirstAdminUser, createSession, hashToken, verifyPassword } from '../auth.js'
 import type { Database } from '../db/client.js'
 import { sendForbidden, sendUnauthorized } from './http-errors.js'
 
@@ -37,21 +37,14 @@ export function registerAuthPublicRoutes(
     '/auth/register',
     { schema: { body: Credentials, response: { 201: SessionResponse } } },
     async (request: FastifyRequest<{ Body: CredentialsT }>, reply) => {
-      const existingUser = await db.selectFrom('users').select('id').executeTakeFirst()
-      if (existingUser) {
+      const user = await createFirstAdminUser(db, request.body.email, request.body.password)
+      if (!user) {
         return sendForbidden(reply, 'registration is closed; ask an admin to create your account')
       }
 
-      const body = request.body
-      const user = await db
-        .insertInto('users')
-        .values({ email: body.email, password_hash: hashPassword(body.password), role: 'admin' })
-        .returningAll()
-        .executeTakeFirstOrThrow()
-
       const token = await createSession(db, user.id, sessionTtlHours)
       reply.code(201)
-      return { user: { id: user.id, email: user.email, role: user.role }, token }
+      return { user, token }
     },
   )
 
