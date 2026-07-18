@@ -1,7 +1,11 @@
-# overcheck
+# Overcheck
 
-Self-hosted uptime monitoring built for teams and automation — API-first, config-as-code,
-Postgres-backed.
+**Self-hosted uptime monitoring built for teams and automation — API-first, config-as-code, Postgres-backed.**
+
+![Demo](docs/demo.gif)
+<!-- TODO: drop in a recorded demo GIF/video before launch -->
+
+Uptime Kuma is wonderful until your team grows. Then you hit the walls: no API, no config files, one user account, SQLite. Overcheck starts where those walls are.
 
 ## Quickstart
 
@@ -30,3 +34,82 @@ overcheck apply -f monitors.yaml
 ```
 
 See [docs/config-as-code.md](docs/config-as-code.md) for the full YAML schema and CLI usage.
+
+## Why Overcheck
+
+|  | Overcheck | Uptime Kuma | Gatus |
+|---|---|---|---|
+| REST API (mutable, CRUD) | ✅ first-class | ❌ ([#118](https://github.com/louislam/uptime-kuma/issues/118), open since 2021) | ❌ read-only status API; monitors are YAML-only, redeploy to change |
+| Config-as-code | ✅ YAML + `overcheck apply` | ❌ | ✅ YAML-native — arguably more mature than ours; it's the *only* way to configure Gatus |
+| Multi-user + roles | ✅ admin/editor/viewer | ❌ single user | ❌ no built-in auth/roles |
+| Postgres | ✅ native, only supported backend | ❌ SQLite | ✅ supported (alongside SQLite/in-memory) |
+| Multi-location checks | roadmap (Overcheck Cloud, not yet built) | ❌ single location | ❌ single instance |
+| Self-hosted, open source | ✅ AGPL-3.0 | ✅ MIT | ✅ Apache-2.0 |
+| Price for a small team | $0 self-hosted / $29 cloud (planned) | $0 | $0 |
+
+Gatus and Uptime Kuma are both good tools solving different problems — Gatus especially if you
+want pure YAML-in-Git with no database of its own. Overcheck's bet is a real API and multi-user
+roles on top of config-as-code, for teams that outgrow a single YAML file redeployed by hand.
+
+## Monitors as code
+
+```yaml
+# monitors.yaml — version-controlled, applied on deploy
+monitors:
+  - name: marketing-site
+    type: http
+    httpUrl: https://example.com
+    intervalSeconds: 60
+    degradedAfterMs: 800   # alert on slow, not just down
+    alertChannels: [oncall-slack]
+
+  - name: api-health
+    type: keyword
+    httpUrl: https://api.example.com/health
+    httpBodyContains: '"status":"ok"'
+    intervalSeconds: 30
+
+alertChannels:
+  - name: oncall-slack
+    type: slack
+    config:
+      webhookUrl: https://hooks.slack.com/services/T000/B000/XXXX
+```
+
+```bash
+overcheck apply -f monitors.yaml   # or POST /api/v1/monitors — same thing
+```
+
+## What's in the box
+
+- **Checks:** HTTP(S), TCP, ping, keyword — with retries, degraded state, and downtime-duration in every alert
+- **Teams:** admin / editor / viewer roles; OIDC SSO on the roadmap
+- **Alerting:** Slack, email, webhooks
+- **Status pages:** branded, public, per-group monitors, response-time graphs, selectable
+  24h/7d/30d/90d uptime windows, incident history — server-rendered at `/status/:slug`, no
+  client-side framework
+- **API:** everything the UI does, documented with OpenAPI. The UI is just an API client.
+
+Check history is kept for `CHECK_RETENTION_DAYS` (default 90 days, up from 30 — the status
+page's 90-day uptime bar needs that much history). Lower it if disk is tight on a
+high-frequency-monitor deployment; see [config-as-code.md](docs/config-as-code.md#check-retention).
+
+## Overcheck Cloud (optional, funds the project)
+
+Self-hosting is free forever. Cloud is planned to add what self-hosting can't — global
+multi-region probes, zero-ops hosting, and AI incident diagnosis — but it isn't built yet.
+Self-hosted Overcheck is the only thing available today.
+
+## Project status
+
+Early. Built in the open by [Baratek](https://baratek.com), funded by consulting, not VC — which
+means no rug-pulls and no pivot-to-enterprise ghosting. Roadmap is the issue tracker; the
+most-upvoted issue gets built next.
+
+Overcheck is built by a solo founder with AI-assisted implementation (Claude Code); architecture,
+review, and all merge decisions are human-owned — see [docs/adr/](docs/adr/) for the record.
+
+**Star the repo to follow along. File an issue to shape v1.**
+
+---
+License: [AGPL-3.0](LICENSE) (core) · [Config-as-code docs](docs/config-as-code.md) · [Roadmap](https://github.com/overcheck/overcheck/issues)
