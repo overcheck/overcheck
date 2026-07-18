@@ -8,5 +8,4 @@ build/
 coverage/
 .vscode/
 *.tsbuildinfo
-docs/private-notes.md
 
