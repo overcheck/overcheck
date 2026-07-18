@@ -8,4 +8,7 @@ build/
 coverage/
 .vscode/
 *.tsbuildinfo
+/CLAUDE.md
+/docs/roadmap.md
+/docs/execution-playbook.md
 
