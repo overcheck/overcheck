@@ -8,6 +8,8 @@ import {
   renderMonitorDetailPage,
   renderMonitorFormPage,
   renderMonitorsListPage,
+  renderStatusPageFormPage,
+  renderStatusPagesListPage,
 } from '../dashboard/html.js'
 import {
   alertChannelFormValuesToConfig,
@@ -16,12 +18,17 @@ import {
   buildMonitorDetailViewModel,
   buildMonitorsListViewModel,
   buildSidebarViewModel,
+  buildStatusPagesListViewModel,
   DEFAULT_ALERT_CHANNEL_FORM_VALUES,
   DEFAULT_MONITOR_FORM_VALUES,
+  DEFAULT_STATUS_PAGE_FORM_VALUES,
   monitorToFormValues,
+  statusPageFormValuesToWriteBody,
+  statusPageToFormValues,
   TARGET_FIELD_META,
   type AlertChannelFormFieldValues,
   type MonitorFormFieldValues,
+  type StatusPageFormFieldValues,
 } from '../dashboard/view-models.js'
 import { canWrite } from '../dashboard/role-helpers.js'
 import type { Window } from '../status-page/public-data.js'
@@ -133,6 +140,43 @@ function alertChannelFormValuesFromBody(body: FormBody): AlertChannelFormFieldVa
       : 'slack',
     target: formString(body, 'target'),
   }
+}
+
+function statusPageFormValuesFromBody(
+  body: FormBody,
+  allMonitorIds: number[],
+): StatusPageFormFieldValues {
+  const monitorIds = formStringArray(body, 'monitorIds')
+    .map(Number)
+    .filter((n) => !Number.isNaN(n))
+  const groupNames: Record<number, string> = {}
+  for (const id of allMonitorIds) {
+    const value = formString(body, `groupName_${id}`)
+    if (value) groupNames[id] = value
+  }
+  return {
+    name: formString(body, 'name'),
+    slug: formString(body, 'slug'),
+    logoUrl: formString(body, 'logoUrl'),
+    accentColor: formString(body, 'accentColor'),
+    monitorIds,
+    groupNames,
+  }
+}
+
+const SLUG_PATTERN = /^[a-z0-9-]+$/
+
+function validateStatusPageFormValues(values: StatusPageFormFieldValues): {
+  name?: string
+  slug?: string
+} {
+  const errors: { name?: string; slug?: string } = {}
+  if (!values.name.trim()) errors.name = 'Name is required.'
+  if (!values.slug.trim()) errors.slug = 'Slug is required.'
+  else if (!SLUG_PATTERN.test(values.slug.trim())) {
+    errors.slug = 'Slug must be lowercase letters, numbers, and hyphens only.'
+  }
+  return errors
 }
 
 /**
@@ -551,6 +595,172 @@ export function registerDashboardHtmlRoutes(app: FastifyInstance): void {
         ? 'Test alert sent successfully.'
         : `Test alert failed: ${result.data.error ?? 'unknown error'}`
       return reply.redirect(`/dashboard/alert-channels?flash=${encodeURIComponent(flash)}`)
+    },
+  )
+
+  // ---- Status pages ----
+
+  app.get('/dashboard/status-pages', async (request, reply) => {
+    const vm = await buildStatusPagesListViewModel(apiFor(request), request.user)
+    reply.type('text/html')
+    return renderStatusPagesListPage(vm)
+  })
+
+  app.get('/dashboard/status-pages/new', async (request, reply) => {
+    if (!canWrite(request.user.role)) {
+      reply.code(404).type('text/html')
+      return notFoundPage()
+    }
+    const monitorsRes = await apiFor(request).listMonitors()
+    reply.type('text/html')
+    return renderStatusPageFormPage({
+      sidebar: buildSidebarViewModel(request.user, 'status-pages'),
+      headerLabel: 'New status page',
+      actionUrl: '/dashboard/status-pages/new',
+      isEdit: false,
+      values: DEFAULT_STATUS_PAGE_FORM_VALUES,
+      errors: {},
+      allMonitors: monitorsRes.data.map((m) => ({ id: m.id, name: m.name })),
+      backUrl: '/dashboard/status-pages',
+    })
+  })
+
+  app.post(
+    '/dashboard/status-pages/new',
+    async (request: FastifyRequest<{ Body: FormBody }>, reply) => {
+      if (!canWrite(request.user.role)) {
+        reply.code(404).type('text/html')
+        return notFoundPage()
+      }
+      const api = apiFor(request)
+      const monitorsRes = await api.listMonitors()
+      const allMonitors = monitorsRes.data.map((m) => ({ id: m.id, name: m.name }))
+      const values = statusPageFormValuesFromBody(
+        request.body,
+        allMonitors.map((m) => m.id),
+      )
+      const errors = validateStatusPageFormValues(values)
+
+      if (Object.keys(errors).length === 0) {
+        const created = await api.createStatusPage(statusPageFormValuesToWriteBody(values))
+        if (created.ok) return reply.redirect('/dashboard/status-pages')
+        if (created.status === 409) errors.slug = 'That slug is already in use.'
+        else errors.name = errors.name ?? 'Could not save status page — check the fields above.'
+      }
+
+      reply.code(422).type('text/html')
+      return renderStatusPageFormPage({
+        sidebar: buildSidebarViewModel(request.user, 'status-pages'),
+        headerLabel: 'New status page',
+        actionUrl: '/dashboard/status-pages/new',
+        isEdit: false,
+        values,
+        errors,
+        allMonitors,
+        backUrl: '/dashboard/status-pages',
+      })
+    },
+  )
+
+  app.get(
+    '/dashboard/status-pages/:id/edit',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
+      if (!canWrite(request.user.role)) {
+        reply.code(404).type('text/html')
+        return notFoundPage()
+      }
+      const id = Number(request.params.id)
+      const api = apiFor(request)
+      const [pageRes, monitorsRes] = await Promise.all([api.getStatusPage(id), api.listMonitors()])
+      if (!pageRes.ok) {
+        reply.code(404).type('text/html')
+        return notFoundPage()
+      }
+      reply.type('text/html')
+      return renderStatusPageFormPage({
+        sidebar: buildSidebarViewModel(request.user, 'status-pages'),
+        headerLabel: 'Edit status page',
+        actionUrl: `/dashboard/status-pages/${id}/edit`,
+        isEdit: true,
+        values: statusPageToFormValues(pageRes.data),
+        errors: {},
+        allMonitors: monitorsRes.data.map((m) => ({ id: m.id, name: m.name })),
+        backUrl: '/dashboard/status-pages',
+      })
+    },
+  )
+
+  app.post(
+    '/dashboard/status-pages/:id/edit',
+    async (request: FastifyRequest<{ Params: { id: string }; Body: FormBody }>, reply) => {
+      if (!canWrite(request.user.role)) {
+        reply.code(404).type('text/html')
+        return notFoundPage()
+      }
+      const id = Number(request.params.id)
+      const api = apiFor(request)
+      const monitorsRes = await api.listMonitors()
+      const allMonitors = monitorsRes.data.map((m) => ({ id: m.id, name: m.name }))
+      const values = statusPageFormValuesFromBody(
+        request.body,
+        allMonitors.map((m) => m.id),
+      )
+      const errors = validateStatusPageFormValues(values)
+
+      if (Object.keys(errors).length === 0) {
+        const updated = await api.updateStatusPage(id, statusPageFormValuesToWriteBody(values))
+        if (updated.ok) return reply.redirect('/dashboard/status-pages')
+        if (updated.status === 409) errors.slug = 'That slug is already in use.'
+        else errors.name = errors.name ?? 'Could not save status page — check the fields above.'
+      }
+
+      reply.code(422).type('text/html')
+      return renderStatusPageFormPage({
+        sidebar: buildSidebarViewModel(request.user, 'status-pages'),
+        headerLabel: 'Edit status page',
+        actionUrl: `/dashboard/status-pages/${id}/edit`,
+        isEdit: true,
+        values,
+        errors,
+        allMonitors,
+        backUrl: '/dashboard/status-pages',
+      })
+    },
+  )
+
+  app.get(
+    '/dashboard/status-pages/:id/delete/confirm',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
+      if (!canWrite(request.user.role)) {
+        reply.code(404).type('text/html')
+        return notFoundPage()
+      }
+      const id = Number(request.params.id)
+      const pageRes = await apiFor(request).getStatusPage(id)
+      if (!pageRes.ok) {
+        reply.code(404).type('text/html')
+        return notFoundPage()
+      }
+      reply.type('text/html')
+      return renderDeleteConfirmPage(
+        buildSidebarViewModel(request.user, 'status-pages'),
+        pageRes.data.name,
+        `/dashboard/status-pages/${id}/delete`,
+        '/dashboard/status-pages',
+      )
+    },
+  )
+
+  app.post(
+    '/dashboard/status-pages/:id/delete',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
+      if (!canWrite(request.user.role)) {
+        reply.code(404).type('text/html')
+        return notFoundPage()
+      }
+      const id = Number(request.params.id)
+      await apiFor(request).deleteStatusPage(id)
+      return reply.redirect('/dashboard/status-pages')
     },
   )
 }
