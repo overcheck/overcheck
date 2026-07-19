@@ -2,8 +2,7 @@
 
 **Self-hosted uptime monitoring built for teams and automation — API-first, config-as-code, Postgres-backed.**
 
-![Demo](docs/demo.gif)
-<!-- TODO: drop in a recorded demo GIF/video before launch -->
+<video src="docs/demo.mp4" controls width="720">Demo: zero-users setup through a live public status page.</video>
 
 Uptime Kuma is wonderful until your team grows. Then you hit the walls: no API, no config files, one user account, SQLite. Overcheck starts where those walls are.
 
