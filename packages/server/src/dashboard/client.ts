@@ -69,6 +69,30 @@ export interface AlertChannelWriteBody {
   enabled?: boolean
 }
 
+export interface ApiStatusPageMonitor {
+  monitorId: number
+  groupName: string | null
+}
+
+export interface ApiStatusPage {
+  id: number
+  name: string
+  slug: string
+  logoUrl: string | null
+  accentColor: string
+  monitors: ApiStatusPageMonitor[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface StatusPageWriteBody {
+  name: string
+  slug: string
+  logoUrl?: string
+  accentColor?: string
+  monitors?: { monitorId: number; groupName?: string }[]
+}
+
 export interface ApiResult<T> {
   ok: boolean
   status: number
@@ -130,6 +154,13 @@ export function dashboardApi(app: FastifyInstance, token: string) {
     deleteAlertChannel: (id: number) => call<undefined>('DELETE', `/api/alert-channels/${id}`),
     testAlertChannel: (id: number) =>
       call<{ success: boolean; error?: string }>('POST', `/api/alert-channels/${id}/test`),
+    listStatusPages: () => call<ApiStatusPage[]>('GET', '/api/status-pages'),
+    getStatusPage: (id: number) => call<ApiStatusPage>('GET', `/api/status-pages/${id}`),
+    createStatusPage: (body: StatusPageWriteBody) =>
+      call<ApiStatusPage>('POST', '/api/status-pages', body),
+    updateStatusPage: (id: number, body: Partial<StatusPageWriteBody>) =>
+      call<ApiStatusPage>('PATCH', `/api/status-pages/${id}`, body),
+    deleteStatusPage: (id: number) => call<undefined>('DELETE', `/api/status-pages/${id}`),
   }
 }
 

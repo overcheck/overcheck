@@ -3,7 +3,13 @@ import type { CheckStatus } from '../check-engine/types.js'
 import { STATUS_COLOR, STATUS_LABEL } from '../status-page/aggregation.js'
 import { markerShapeFor } from '../status-page/public-data.js'
 import type { Window } from '../status-page/public-data.js'
-import type { ApiAlertChannel, ApiMonitor, DashboardApi } from './client.js'
+import type {
+  ApiAlertChannel,
+  ApiMonitor,
+  ApiStatusPage,
+  DashboardApi,
+  StatusPageWriteBody,
+} from './client.js'
 import { canWrite } from './role-helpers.js'
 import { sortMonitorRows, type SortColumn, type SortDirection } from './sorting.js'
 
@@ -13,7 +19,7 @@ export interface SidebarViewModel {
   displayName: string
   initials: string
   role: UserRole
-  activeNav: 'monitors' | 'alert-channels'
+  activeNav: 'monitors' | 'alert-channels' | 'status-pages'
 }
 
 export function buildSidebarViewModel(
@@ -414,4 +420,102 @@ export function alertChannelFormValuesToConfig(
   values: AlertChannelFormFieldValues,
 ): Record<string, unknown> {
   return { [TARGET_CONFIG_KEY[values.type]]: values.target }
+}
+
+export interface StatusPageRowViewModel {
+  id: number
+  name: string
+  slug: string
+  monitorCount: number
+  publicUrl: string
+  editUrl?: string
+  deleteConfirmUrl?: string
+}
+
+export interface StatusPagesListViewModel {
+  sidebar: SidebarViewModel
+  canWrite: boolean
+  newStatusPageUrl?: string
+  rows: StatusPageRowViewModel[]
+  isFreshWorkspace: boolean
+}
+
+export async function buildStatusPagesListViewModel(
+  api: DashboardApi,
+  user: AuthUser,
+): Promise<StatusPagesListViewModel> {
+  const res = await api.listStatusPages()
+  const pages = res.data
+  const write = canWrite(user.role)
+
+  return {
+    sidebar: buildSidebarViewModel(user, 'status-pages'),
+    canWrite: write,
+    newStatusPageUrl: write ? '/dashboard/status-pages/new' : undefined,
+    rows: pages.map((p) => ({
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      monitorCount: p.monitors.length,
+      publicUrl: `/status/${p.slug}`,
+      editUrl: write ? `/dashboard/status-pages/${p.id}/edit` : undefined,
+      deleteConfirmUrl: write ? `/dashboard/status-pages/${p.id}/delete/confirm` : undefined,
+    })),
+    isFreshWorkspace: pages.length === 0,
+  }
+}
+
+export interface StatusPageFormFieldValues {
+  name: string
+  slug: string
+  logoUrl: string
+  accentColor: string
+  monitorIds: number[]
+  groupNames: Record<number, string>
+}
+
+export interface StatusPageFormViewModel {
+  sidebar: SidebarViewModel
+  headerLabel: string
+  actionUrl: string
+  isEdit: boolean
+  values: StatusPageFormFieldValues
+  errors: { name?: string; slug?: string }
+  allMonitors: { id: number; name: string }[]
+  backUrl: string
+}
+
+export const DEFAULT_STATUS_PAGE_FORM_VALUES: StatusPageFormFieldValues = {
+  name: '',
+  slug: '',
+  logoUrl: '',
+  accentColor: '',
+  monitorIds: [],
+  groupNames: {},
+}
+
+export function statusPageToFormValues(page: ApiStatusPage): StatusPageFormFieldValues {
+  return {
+    name: page.name,
+    slug: page.slug,
+    logoUrl: page.logoUrl ?? '',
+    accentColor: page.accentColor,
+    monitorIds: page.monitors.map((m) => m.monitorId),
+    groupNames: Object.fromEntries(page.monitors.map((m) => [m.monitorId, m.groupName ?? ''])),
+  }
+}
+
+export function statusPageFormValuesToWriteBody(
+  values: StatusPageFormFieldValues,
+): StatusPageWriteBody {
+  return {
+    name: values.name.trim(),
+    slug: values.slug.trim(),
+    ...(values.logoUrl.trim() && { logoUrl: values.logoUrl.trim() }),
+    ...(values.accentColor.trim() && { accentColor: values.accentColor.trim() }),
+    monitors: values.monitorIds.map((monitorId) => {
+      const groupName = values.groupNames[monitorId]?.trim()
+      return groupName ? { monitorId, groupName } : { monitorId }
+    }),
+  }
 }

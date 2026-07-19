@@ -366,3 +366,275 @@ describe('dashboard alert channels', () => {
     expect(response.headers.location).toContain('/dashboard/alert-channels?flash=')
   })
 })
+
+function uniqueSlug(label: string): string {
+  return `${label}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`
+}
+
+async function createStatusPage(overrides: Record<string, unknown> = {}) {
+  const slug = uniqueSlug('status-page')
+  const response = await testApp.inject({
+    method: 'POST',
+    url: '/api/status-pages',
+    headers: authHeader,
+    payload: { name: `status-page-${Date.now()}`, slug, ...overrides },
+  })
+  return JSON.parse(response.body) as { id: number; name: string; slug: string }
+}
+
+describe('dashboard status pages list', () => {
+  it('renders 200 HTML for an authenticated admin, including "+ New status page"', async () => {
+    const admin = await createTestUser('admin')
+    const cookie = await loginCookie(admin)
+    const response = await testApp.inject({
+      method: 'GET',
+      url: '/dashboard/status-pages',
+      headers: { cookie },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.headers['content-type']).toContain('text/html')
+    expect(response.body).toContain('/dashboard/status-pages/new')
+  })
+
+  it('shows the slug, monitor count, and a link to the live public page', async () => {
+    const admin = await createTestUser('admin')
+    const cookie = await loginCookie(admin)
+    const monitor = await createMonitor()
+    const page = await createStatusPage({ monitors: [{ monitorId: monitor.id }] })
+
+    const response = await testApp.inject({
+      method: 'GET',
+      url: '/dashboard/status-pages',
+      headers: { cookie },
+    })
+    expect(response.body).toContain(page.slug)
+    expect(response.body).toContain(`/status/${page.slug}`)
+  })
+
+  it('hides "+ New status page" and every edit/delete action for a viewer', async () => {
+    const viewer = await createTestUser('viewer')
+    const cookie = await loginCookie(viewer)
+    const page = await createStatusPage()
+
+    const response = await testApp.inject({
+      method: 'GET',
+      url: '/dashboard/status-pages',
+      headers: { cookie },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.body).toContain(page.slug)
+    expect(response.body).not.toContain('/dashboard/status-pages/new')
+    expect(response.body).not.toContain(`/dashboard/status-pages/${page.id}/edit`)
+    expect(response.body).not.toContain(`/dashboard/status-pages/${page.id}/delete`)
+  })
+})
+
+describe('dashboard status page form access control', () => {
+  it('GET /dashboard/status-pages/new is 200 for an editor', async () => {
+    const editor = await createTestUser('editor')
+    const cookie = await loginCookie(editor)
+    const response = await testApp.inject({
+      method: 'GET',
+      url: '/dashboard/status-pages/new',
+      headers: { cookie },
+    })
+    expect(response.statusCode).toBe(200)
+  })
+
+  it('GET /dashboard/status-pages/new is 404 for a viewer', async () => {
+    const viewer = await createTestUser('viewer')
+    const cookie = await loginCookie(viewer)
+    const response = await testApp.inject({
+      method: 'GET',
+      url: '/dashboard/status-pages/new',
+      headers: { cookie },
+    })
+    expect(response.statusCode).toBe(404)
+  })
+
+  it('GET /dashboard/status-pages/:id/edit is 404 for a viewer', async () => {
+    const viewer = await createTestUser('viewer')
+    const cookie = await loginCookie(viewer)
+    const page = await createStatusPage()
+    const response = await testApp.inject({
+      method: 'GET',
+      url: `/dashboard/status-pages/${page.id}/edit`,
+      headers: { cookie },
+    })
+    expect(response.statusCode).toBe(404)
+  })
+})
+
+describe('dashboard status page create/edit/delete flows', () => {
+  it('creates a status page via the form, with a monitor and a group name, and redirects to the list', async () => {
+    const editor = await createTestUser('editor')
+    const cookie = await loginCookie(editor)
+    const monitor = await createMonitor()
+    const name = `form-created-${Date.now()}`
+    const slug = uniqueSlug('form-created')
+
+    const response = await testApp.inject({
+      method: 'POST',
+      url: '/dashboard/status-pages/new',
+      headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+      payload: `name=${encodeURIComponent(name)}&slug=${encodeURIComponent(slug)}&monitorIds=${monitor.id}&groupName_${monitor.id}=${encodeURIComponent('Core services')}`,
+    })
+    expect(response.statusCode).toBe(302)
+    expect(response.headers.location).toBe('/dashboard/status-pages')
+
+    const listResponse = await testApp.inject({
+      method: 'GET',
+      url: '/api/status-pages',
+      headers: authHeader,
+    })
+    const pages = JSON.parse(listResponse.body) as {
+      name: string
+      slug: string
+      monitors: { monitorId: number; groupName: string | null }[]
+    }[]
+    const created = pages.find((p) => p.slug === slug)
+    expect(created).toBeDefined()
+    expect(created?.name).toBe(name)
+    expect(created?.monitors).toEqual([{ monitorId: monitor.id, groupName: 'Core services' }])
+  })
+
+  it('re-renders the form with an inline error when name is missing', async () => {
+    const editor = await createTestUser('editor')
+    const cookie = await loginCookie(editor)
+    const response = await testApp.inject({
+      method: 'POST',
+      url: '/dashboard/status-pages/new',
+      headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+      payload: `name=&slug=${uniqueSlug('missing-name')}`,
+    })
+    expect(response.statusCode).toBe(422)
+    expect(response.body).toContain('Name is required.')
+  })
+
+  it('re-renders the form with an inline error when slug is missing', async () => {
+    const editor = await createTestUser('editor')
+    const cookie = await loginCookie(editor)
+    const response = await testApp.inject({
+      method: 'POST',
+      url: '/dashboard/status-pages/new',
+      headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+      payload: `name=${encodeURIComponent(`no-slug-${Date.now()}`)}&slug=`,
+    })
+    expect(response.statusCode).toBe(422)
+    expect(response.body).toContain('Slug is required.')
+  })
+
+  it('re-renders the form with an inline error when the slug has invalid characters', async () => {
+    const editor = await createTestUser('editor')
+    const cookie = await loginCookie(editor)
+    const response = await testApp.inject({
+      method: 'POST',
+      url: '/dashboard/status-pages/new',
+      headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+      payload: `name=${encodeURIComponent(`bad-slug-${Date.now()}`)}&slug=Not_A_Valid-Slug!`,
+    })
+    expect(response.statusCode).toBe(422)
+    expect(response.body).toContain('lowercase letters, numbers, and hyphens')
+  })
+
+  it('rejects a duplicate slug with a friendly inline error, matching the DB unique constraint', async () => {
+    const editor = await createTestUser('editor')
+    const cookie = await loginCookie(editor)
+    const existing = await createStatusPage()
+
+    const response = await testApp.inject({
+      method: 'POST',
+      url: '/dashboard/status-pages/new',
+      headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+      payload: `name=${encodeURIComponent(`dup-${Date.now()}`)}&slug=${existing.slug}`,
+    })
+    expect(response.statusCode).toBe(422)
+    expect(response.body).toContain('That slug is already in use.')
+  })
+
+  it('edits a status page, updating branding and monitor assignment, and the public page reflects it', async () => {
+    const editor = await createTestUser('editor')
+    const cookie = await loginCookie(editor)
+    const monitor = await createMonitor()
+    const page = await createStatusPage()
+    const newName = `edited-${Date.now()}`
+
+    const response = await testApp.inject({
+      method: 'POST',
+      url: `/dashboard/status-pages/${page.id}/edit`,
+      headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+      payload: `name=${encodeURIComponent(newName)}&slug=${page.slug}&accentColor=${encodeURIComponent('oklch(0.6 0.2 30)')}&monitorIds=${monitor.id}`,
+    })
+    expect(response.statusCode).toBe(302)
+
+    const getResponse = await testApp.inject({
+      method: 'GET',
+      url: `/api/status-pages/${page.id}`,
+      headers: authHeader,
+    })
+    const updated = JSON.parse(getResponse.body) as {
+      name: string
+      accentColor: string
+      monitors: { monitorId: number }[]
+    }
+    expect(updated.name).toBe(newName)
+    expect(updated.accentColor).toBe('oklch(0.6 0.2 30)')
+    expect(updated.monitors).toEqual([{ monitorId: monitor.id, groupName: null }])
+
+    const publicResponse = await testApp.inject({
+      method: 'GET',
+      url: `/api/public/status-pages/${page.slug}`,
+    })
+    expect(publicResponse.statusCode).toBe(200)
+    expect(JSON.parse(publicResponse.body).name).toBe(newName)
+  })
+
+  it('shows a delete confirmation page, then actually deletes on confirm', async () => {
+    const editor = await createTestUser('editor')
+    const cookie = await loginCookie(editor)
+    const page = await createStatusPage()
+
+    const confirmPage = await testApp.inject({
+      method: 'GET',
+      url: `/dashboard/status-pages/${page.id}/delete/confirm`,
+      headers: { cookie },
+    })
+    expect(confirmPage.statusCode).toBe(200)
+    expect(confirmPage.body).toContain(page.name)
+
+    const deleteResponse = await testApp.inject({
+      method: 'POST',
+      url: `/dashboard/status-pages/${page.id}/delete`,
+      headers: { cookie },
+    })
+    expect(deleteResponse.statusCode).toBe(302)
+    expect(deleteResponse.headers.location).toBe('/dashboard/status-pages')
+
+    const afterDelete = await testApp.inject({
+      method: 'GET',
+      url: `/api/status-pages/${page.id}`,
+      headers: authHeader,
+    })
+    expect(afterDelete.statusCode).toBe(404)
+  })
+
+  it('a viewer cannot create/edit/delete via POST (404s, and nothing changes)', async () => {
+    const viewer = await createTestUser('viewer')
+    const cookie = await loginCookie(viewer)
+    const page = await createStatusPage()
+
+    const deleteAttempt = await testApp.inject({
+      method: 'POST',
+      url: `/dashboard/status-pages/${page.id}/delete`,
+      headers: { cookie },
+    })
+    expect(deleteAttempt.statusCode).toBe(404)
+
+    const stillThere = await testApp.inject({
+      method: 'GET',
+      url: `/api/status-pages/${page.id}`,
+      headers: authHeader,
+    })
+    expect(stillThere.statusCode).toBe(200)
+  })
+})

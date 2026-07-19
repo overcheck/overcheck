@@ -8,6 +8,9 @@ import type {
   MonitorsListViewModel,
   SidebarViewModel,
   StatusFilter,
+  StatusPageFormViewModel,
+  StatusPageRowViewModel,
+  StatusPagesListViewModel,
   TypeFilter,
 } from './view-models.js'
 
@@ -147,12 +150,19 @@ function headTags(title: string): string {
 }
 
 function renderSidebar(sidebar: SidebarViewModel): string {
-  const monitorsActive = sidebar.activeNav === 'monitors'
+  const navItem = (
+    key: SidebarViewModel['activeNav'],
+    href: string,
+    icon: string,
+    label: string,
+  ): string =>
+    `<a class="nav-item ${sidebar.activeNav === key ? 'active' : ''}" href="${href}"><span class="nav-icon">${icon}</span>${label}</a>`
   return `
     <div class="sidebar">
       <div class="brand"><div class="brand-mark"></div><div class="brand-name">Overcheck</div></div>
-      <a class="nav-item ${monitorsActive ? 'active' : ''}" href="/dashboard/monitors"><span class="nav-icon">&#9636;</span>Monitors</a>
-      <a class="nav-item ${!monitorsActive ? 'active' : ''}" href="/dashboard/alert-channels"><span class="nav-icon">&#9684;</span>Alert channels</a>
+      ${navItem('monitors', '/dashboard/monitors', '&#9636;', 'Monitors')}
+      ${navItem('alert-channels', '/dashboard/alert-channels', '&#9684;', 'Alert channels')}
+      ${navItem('status-pages', '/dashboard/status-pages', '&#9673;', 'Status pages')}
       <div class="account">
         <div class="account-label">Signed in as</div>
         <div class="account-row">
@@ -582,6 +592,106 @@ export function renderAlertChannelFormPage(vm: AlertChannelFormViewModel): strin
         </div>
         <div class="actions-row">
           <button type="submit" id="save-channel" class="btn-primary" style="border:none">Save channel</button>
+          <a class="btn-neutral" href="${vm.backUrl}">Cancel</a>
+        </div>
+      </form>
+    </div>`
+
+  return renderLayout(vm.headerLabel, vm.sidebar, body)
+}
+
+function renderStatusPageRow(p: StatusPageRowViewModel): string {
+  const nameCell = p.editUrl
+    ? `<a href="${p.editUrl}" style="text-decoration:none;font-weight:500;color:inherit">${escapeHtml(p.name)}</a>`
+    : escapeHtml(p.name)
+  return `
+    <tr>
+      <td>${nameCell}</td>
+      <td class="mono">${escapeHtml(p.slug)}</td>
+      <td class="mono">${p.monitorCount}</td>
+      <td><a href="${p.publicUrl}" target="_blank" rel="noopener" class="mono" style="color:oklch(0.65 0.01 250)">${escapeHtml(p.publicUrl)}</a></td>
+      <td style="text-align:right">
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          ${p.editUrl ? `<a class="btn-neutral" href="${p.editUrl}">Edit</a>` : ''}
+          ${p.deleteConfirmUrl ? `<a class="btn-danger" href="${p.deleteConfirmUrl}">Delete</a>` : ''}
+        </div>
+      </td>
+    </tr>`
+}
+
+export function renderStatusPagesListPage(vm: StatusPagesListViewModel): string {
+  const body = `
+    <div class="header" style="padding:20px 26px">
+      <div class="header-row">
+        <div class="page-title">Status pages</div>
+        ${vm.newStatusPageUrl ? `<a class="btn-primary" style="margin-left:auto" href="${vm.newStatusPageUrl}">+ New status page</a>` : ''}
+      </div>
+    </div>
+    <div class="scroll" style="padding:16px 26px">
+      <table class="data">
+        <thead><tr><th>Name</th><th>Slug</th><th>Monitors</th><th>Public page</th><th></th></tr></thead>
+        <tbody>${vm.rows.map(renderStatusPageRow).join('')}</tbody>
+      </table>
+      ${
+        vm.isFreshWorkspace
+          ? `<div class="empty">No status pages yet.${vm.newStatusPageUrl ? ` <a href="${vm.newStatusPageUrl}">Create your first status page</a>.` : ''}</div>`
+          : ''
+      }
+    </div>`
+
+  return renderLayout('Status pages', vm.sidebar, body)
+}
+
+export function renderStatusPageFormPage(vm: StatusPageFormViewModel): string {
+  const monitorRows = vm.allMonitors
+    .map((m) => {
+      const checked = vm.values.monitorIds.includes(m.id)
+      const groupName = vm.values.groupNames[m.id] ?? ''
+      return `
+      <tr>
+        <td><input type="checkbox" name="monitorIds" value="${m.id}" ${checked ? 'checked' : ''} /></td>
+        <td>${escapeHtml(m.name)}</td>
+        <td><input type="text" name="groupName_${m.id}" value="${escapeHtml(groupName)}" placeholder="Optional group" /></td>
+      </tr>`
+    })
+    .join('')
+
+  const body = `
+    <div class="header" style="padding:18px 26px">
+      <a class="back-link" href="${vm.backUrl}">&larr; Status pages</a>
+      <div class="page-title">${escapeHtml(vm.headerLabel)}</div>
+    </div>
+    <div class="scroll form-body" style="padding:22px 26px">
+      <form method="POST" action="${vm.actionUrl}">
+        <div class="field">
+          <label class="field-label" for="name">Name</label>
+          <input id="name" name="name" value="${escapeHtml(vm.values.name)}" />
+          ${vm.errors.name ? `<div class="field-error">${escapeHtml(vm.errors.name)}</div>` : ''}
+        </div>
+        <div class="field mono">
+          <label class="field-label" for="slug">Slug</label>
+          <input id="slug" name="slug" value="${escapeHtml(vm.values.slug)}" placeholder="my-status-page" />
+          ${vm.errors.slug ? `<div class="field-error">${escapeHtml(vm.errors.slug)}</div>` : ''}
+        </div>
+        <div class="field-row-2">
+          <div class="field mono">
+            <label class="field-label" for="logoUrl">Logo URL</label>
+            <input id="logoUrl" name="logoUrl" value="${escapeHtml(vm.values.logoUrl)}" placeholder="https://example.com/logo.png" />
+          </div>
+          <div class="field mono">
+            <label class="field-label" for="accentColor">Accent color</label>
+            <input id="accentColor" name="accentColor" value="${escapeHtml(vm.values.accentColor)}" placeholder="oklch(0.55 0.16 250)" />
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label">Monitors</label>
+          <table class="data">
+            <thead><tr><th></th><th>Monitor</th><th>Group name</th></tr></thead>
+            <tbody>${monitorRows}</tbody>
+          </table>
+        </div>
+        <div class="actions-row">
+          <button type="submit" id="save-status-page" class="btn-primary" style="border:none">Save status page</button>
           <a class="btn-neutral" href="${vm.backUrl}">Cancel</a>
         </div>
       </form>
